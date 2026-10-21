@@ -1,0 +1,7 @@
+# Logins, Tokens, Client-Secrets, Warteschlange – niemals committen
+data/
+config.json
+
+node_modules/
+.claude/
+*.log

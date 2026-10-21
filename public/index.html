@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songrequest-Bot</title>
+<style>
+  :root { --bg:#0f0f12; --card:#1b1b21; --line:#2c2c35; --text:#ececf1; --muted:#9a9aa8; --accent:#9147ff; --ok:#1db954; --bad:#ef4444; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 48px; display:grid; gap:16px; }
+  h1 { margin:0; font-size:22px; }
+  h2 { margin:0 0 12px; font-size:15px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .grid { display:grid; gap:16px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--bad); flex:none; }
+  .dot.on { background:var(--ok); }
+  .muted { color:var(--muted); font-size:13px; }
+  .err { color:#fca5a5; font-size:13px; }
+  button, .btn { background:#2a2a33; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 12px; font:inherit; cursor:pointer; text-decoration:none; }
+  button:hover, .btn:hover { border-color:var(--accent); }
+  .primary { background:var(--accent); border-color:var(--accent); }
+  .check { display:flex; gap:8px; align-items:center; color:var(--text); font-size:14px; }
+  .check input { flex:none; width:18px; height:18px; }
+  .msgrow { display:grid; gap:4px; }
+  .msgrow .row input { flex:1; }
+  .tag { display:inline-flex; gap:6px; align-items:center; background:#2a2a33; border-radius:999px; padding:2px 4px 2px 10px; font-size:13px; }
+  .tag button { padding:0 6px; border-radius:999px; }
+  input, textarea { flex:1; min-width:0; background:#111116; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; }
+  .now { display:flex; gap:14px; align-items:center; }
+  .now img { width:72px; height:72px; border-radius:8px; object-fit:cover; background:#222; }
+  .title { font-weight:600; font-size:17px; }
+  .bar { height:4px; background:#2a2a33; border-radius:2px; margin-top:8px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--ok); width:0; }
+  ol { margin:0; padding:0; list-style:none; display:grid; gap:6px; }
+  li { display:flex; gap:10px; align-items:center; padding:6px; border-radius:8px; background:#15151a; }
+  li img { width:36px; height:36px; border-radius:4px; }
+  li .info { flex:1; min-width:0; }
+  li .info div { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  li button { padding:2px 8px; }
+  pre { margin:0; font-size:12px; color:var(--muted); white-space:pre-wrap; max-height:220px; overflow:auto; }
+  details summary { cursor:pointer; color:var(--muted); font-size:13px; margin-top:8px; }
+  .step { display:grid; gap:10px; }
+  .step h3 { margin:0; font-size:17px; display:flex; gap:8px; align-items:center; }
+  .num { width:26px; height:26px; border-radius:50%; background:var(--accent); display:inline-grid; place-items:center; font-size:14px; flex:none; }
+  .num.done { background:var(--ok); }
+  .step ol.howto { list-style:decimal; padding-left:20px; display:block; color:var(--muted); font-size:14px; }
+  .step ol.howto li { display:list-item; background:none; padding:2px 0; }
+  .step ol.howto b, .step ol.howto code { color:var(--text); }
+  code { background:#111116; border:1px solid var(--line); border-radius:6px; padding:1px 6px; font-size:13px; }
+  label { display:grid; gap:4px; font-size:13px; color:var(--muted); }
+  .fields { display:grid; gap:10px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); }
+  select { background:#111116; color:var(--text); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font:inherit; }
+  .formerr { color:#fca5a5; font-size:13px; min-height:1em; }
+  .hidden { display:none !important; }
+  a { color:#c4a7ff; }
+</style>
+</head>
+<body>
+<main>
+  <div class="row" style="justify-content:space-between">
+    <h1>🎵 Gemeinsame Songrequests</h1>
+    <a class="btn" href="/overlay" target="_blank">Overlay öffnen</a>
+  </div>
+
+  <div id="setup" class="hidden" style="display:grid; gap:16px">
+    <section class="card">
+      <h2>Einrichtung</h2>
+      <p style="margin:0">Einmalig drei Schritte, danach läuft alles von hier aus. Twitch und Spotify verlangen für jeden Bot eine eigene, kostenlose „App“. Deren Schlüssel trägst du einfach unten ein.</p>
+    </section>
+    <div id="setupForms" style="display:grid; gap:16px"></div>
+  </div>
+
+  <div id="dash" style="display:grid; gap:16px">
+  <div class="grid">
+    <section class="card">
+      <h2>Twitch-Bot</h2>
+      <div id="twitch"></div>
+    </section>
+    <div id="accounts" style="display:contents"></div>
+  </div>
+
+  <section class="card">
+    <h2>Jetzt läuft</h2>
+    <div id="now"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="post('/api/skip')">⏭ Nächster Song</button>
+      <button id="openBtn"></button>
+      <button onclick="confirm('Warteschlange wirklich leeren?') && post('/api/clear')">Warteschlange leeren</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Warteschlange <span id="count"></span></h2>
+    <ol id="queue"></ol>
+  </section>
+
+  <section class="card">
+    <div class="row" style="justify-content:space-between; margin-bottom:12px">
+      <h2 style="margin:0">Verlauf <span id="histCount"></span></h2>
+      <button onclick="confirm('Verlauf wirklich löschen?') && post('/api/history-clear')">Verlauf löschen</button>
+    </div>
+    <ol id="history"></ol>
+  </section>
+
+  <section class="card">
+    <details id="settingsBox">
+      <summary style="font-size:15px; margin:0">⚙ Einstellungen</summary>
+      <div id="settingsForms" style="display:grid; gap:16px; margin-top:16px"></div>
+    </details>
+  </section>
+  </div>
+
+  <section class="card">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+const time = (ms) => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+let pasteDrafts = {};
+
+async function post(url, body) {
+  const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body || {}) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) alert(json.error || 'Fehler');
+  else render(json);
+}
+
+async function copyLink(slot) {
+  const { url } = await (await fetch(`/api/spotify-link/${slot}`)).json();
+  try { await navigator.clipboard.writeText(url); alert('Link kopiert! Schick ihn deinem Freund.'); }
+  catch { prompt('Diesen Link deinem Freund schicken:', url); }
+}
+
+async function paste(slot) {
+  const input = $(`paste${slot}`);
+  await post('/api/spotify-paste', { url: input.value });
+  delete pasteDrafts[slot];
+}
+
+function renderTwitch(t) {
+  if (!t.linked) {
+    $('twitch').innerHTML = `<p class="muted">Melde den Bot-Account (oder deinen eigenen) bei Twitch an.</p>
+      <a class="btn primary" href="/auth/twitch">Mit Twitch verbinden</a>`;
+    return;
+  }
+  $('twitch').innerHTML = `<div class="row"><span class="dot ${t.connected ? 'on' : ''}"></span>
+      <b>${esc(t.login)}</b><span class="muted">${t.connected ? 'im Chat' : 'verbindet …'}</span></div>
+    <p class="muted">Kanäle: ${t.channels.map(esc).join(', ')}</p>
+    <button onclick="confirm('Twitch-Bot abmelden?') && post('/api/twitch-disconnect')">Abmelden</button>`;
+}
+
+function renderAccounts(list) {
+  // Eingabefelder nicht beim Tippen überschreiben
+  for (const a of list) { const el = $(`paste${a.slot}`); if (el) pasteDrafts[a.slot] = el.value; }
+  $('accounts').innerHTML = list.map((a, i) => `
+    <section class="card">
+      <h2>Spotify · ${esc(a.name)}${i === 0 ? ' <span class="muted">(Taktgeber)</span>' : ''}</h2>
+      ${a.connected ? `
+        <div class="row"><span class="dot on"></span><b>${esc(a.displayName)}</b><span class="muted">${esc(a.product || '')}</span></div>
+        ${a.error ? `<p class="err">${esc(a.error)}</p>` : ''}
+        <p><button onclick="confirm('Spotify-Account trennen?') && post('/api/spotify-disconnect', { slot: ${a.slot} })">Trennen</button></p>
+      ` : `
+        <p class="muted">Läuft der Spotify-Account auf <b>diesem</b> PC?</p>
+        <a class="btn primary" href="/auth/spotify/${a.slot}">Hier anmelden</a>
+        <details ${i > 0 ? 'open' : ''}>
+          <summary>Account eines Freundes verbinden</summary>
+          <p class="muted">1. Link kopieren und dem Freund schicken.<br>2. Er meldet sich an, danach lädt die Seite nicht – das ist normal.<br>3. Er kopiert die komplette Adresse aus der Adresszeile und schickt sie dir.</p>
+          <p><button onclick="copyLink(${a.slot})">Link kopieren</button></p>
+          <div class="row"><input id="paste${a.slot}" placeholder="http://127.0.0.1:…/callback/spotify?code=…" value="${esc(pasteDrafts[a.slot] || '')}">
+            <button onclick="paste(${a.slot})">Verbinden</button></div>
+        </details>
+      `}
+    </section>`).join('');
+}
+
+function renderNow(s) {
+  const c = s.current, p = s.playback;
+  const playingOurs = c && p && p.uri === c.uri;
+  if (c) {
+    $('now').innerHTML = `<div class="now">${c.image ? `<img src="${esc(c.image)}" alt="">` : ''}<div style="flex:1">
+      <div class="title">${esc(c.name)}</div><div>${esc(c.artists)}</div>
+      <div class="muted">gewünscht von ${esc(c.user)} in #${esc(c.channel)}${playingOurs ? ` · ${time(p.progressMs)} / ${time(p.durationMs)}` : ''}</div>
+      ${playingOurs ? `<div class="bar"><div style="width:${(p.progressMs / p.durationMs) * 100}%"></div></div>` : ''}</div></div>`;
+  } else if (p) {
+    $('now').innerHTML = `<div class="title">${esc(p.name)}</div><div>${esc(p.artists)}</div>
+      <div class="muted">kein Request · ${p.isPlaying ? 'läuft' : 'pausiert'}${p.device ? ' auf ' + esc(p.device) : ''}</div>`;
+  } else {
+    $('now').innerHTML = `<p class="muted">Gerade läuft nichts. Spotify beim Taktgeber öffnen.</p>`;
+  }
+  $('openBtn').textContent = s.open ? '🔓 Requests offen' : '🔒 Requests geschlossen';
+  $('openBtn').onclick = () => post('/api/open', { open: !s.open });
+}
+
+function renderQueue(q, queued) {
+  const total = q.length + (queued ? 1 : 0);
+  $('count').textContent = total ? `(${total})` : '';
+  const first = queued ? `
+    <li>${queued.image ? `<img src="${esc(queued.image)}" alt="">` : ''}
+      <div class="info"><div><b>Als Nächstes: ${esc(queued.name)}</b> – ${esc(queued.artists)}</div>
+      <div class="muted">${esc(queued.user)} · #${esc(queued.channel)} · schon in der Spotify-Warteschlange</div></div>
+    </li>` : '';
+  const offset = queued ? 1 : 0;
+  $('queue').innerHTML = !total ? '<p class="muted">Leer. Zuschauer können mit <b>!sr Songname</b> etwas wünschen.</p>' : first + q.map((e, i) => `
+    <li>${e.image ? `<img src="${esc(e.image)}" alt="">` : ''}
+      <div class="info"><div><b>${i + 1 + offset}. ${esc(e.name)}</b> – ${esc(e.artists)}</div>
+      <div class="muted">${esc(e.user)} · #${esc(e.channel)} · ${time(e.durationMs)}</div></div>
+      <button title="hoch" onclick="post('/api/move', { id:'${e.id}', dir:-1 })">▲</button>
+      <button title="runter" onclick="post('/api/move', { id:'${e.id}', dir:1 })">▼</button>
+      ${blockBtn(e)}
+      <button title="entfernen" onclick="post('/api/remove', { id:'${e.id}' })">✕</button>
+    </li>`).join('');
+}
+
+// Button "Zuschauer sperren" für Warteschlange und Verlauf
+let blacklistNow = [];
+function blockBtn(e) {
+  const name = (e.login || e.user || '').toLowerCase();
+  if (!name) return '';
+  return blacklistNow.includes(name)
+    ? `<button title="${esc(name)} entsperren" onclick="post('/api/blacklist', { user:'${esc(name)}', add:false })">✅</button>`
+    : `<button title="${esc(name)} für Requests sperren" onclick="confirm('${esc(name)} für Requests sperren?') && post('/api/blacklist', { user:'${esc(name)}', add:true })">🚫</button>`;
+}
+
+function renderHistory(h) {
+  $('histCount').textContent = h.length ? `(${h.length})` : '';
+  const when = (t) => new Date(t).toLocaleString('de-DE', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
+  $('history').innerHTML = h.length ? h.map((e) => `
+    <li>${e.image ? `<img src="${esc(e.image)}" alt="">` : ''}
+      <div class="info"><div><b>${esc(e.name)}</b> – ${esc(e.artists)}</div>
+      <div class="muted">${when(e.playedAt)} · gewünscht von <b>${esc(e.user)}</b> · #${esc(e.channel)}</div></div>
+      ${e.url ? `<a class="btn" title="In Spotify öffnen" href="${esc(e.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+      <button title="Nochmal in die Warteschlange" onclick="post('/api/requeue', { id:'${e.id}' })">↻</button>
+      ${blockBtn(e)}
+    </li>`).join('') : '<p class="muted">Noch keine Requests gespielt.</p>';
+}
+
+// --- Einrichtung / Einstellungen ---------------------------------------
+let formsKey = '', justSaved = null;
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); } catch { prompt('Kopieren:', text); }
+}
+const copyable = (t) => `<code>${esc(t)}</code> <button onclick="copyText('${esc(t)}')">Kopieren</button>`;
+
+function step(num, done, title, body) {
+  return `<section class="card step"><h3><span class="num ${done ? 'done' : ''}">${done ? '✓' : num}</span>${title}</h3>${body}</section>`;
+}
+
+function secretField(id, sec, has) {
+  return `<label>Client-Secret<input id="${id}" data-sec="${sec}" type="password" autocomplete="off"
+    placeholder="${has ? 'gespeichert – leer lassen zum Behalten' : ''}"></label>`;
+}
+
+function saveRow(sec, label = 'Prüfen & speichern') {
+  return `<div class="row"><button class="primary" onclick="saveSec('${sec}')">${label}</button><span class="formerr" id="err_${sec}"></span></div>`;
+}
+
+function formsHtml(s, all) {
+  const st = s.settings, c = s.configured;
+  const twitch = step(1, c.twitch, 'Twitch-App', `
+    <ol class="howto">
+      <li>Öffne die <a href="https://dev.twitch.tv/console/apps/create" target="_blank" rel="noopener">Twitch-Entwicklerkonsole</a> und melde dich an. Twitch verlangt dafür die Zwei-Faktor-Authentifizierung.</li>
+      <li><b>Name:</b> beliebig, er muss aber bei Twitch einmalig sein, z. B. <code>Songrequests ${esc(st.channels[0] || 'deinname')}</code></li>
+      <li><b>OAuth-Redirect-URLs:</b> ${copyable(st.redirect.twitch)}</li>
+      <li><b>Kategorie:</b> Chat Bot · <b>Client-Typ:</b> Vertraulich</li>
+      <li><b>Erstellen</b>, dann bei der App auf <b>Verwalten</b>: <b>Client-ID</b> kopieren, auf <b>Neues Geheimnis</b> klicken und das Secret kopieren.</li>
+    </ol>
+    <div class="fields">
+      <label>Client-ID<input id="tw_id" data-sec="twitch" autocomplete="off" value="${esc(st.twitch.clientId)}"></label>
+      ${secretField('tw_secret', 'twitch', st.twitch.hasSecret)}
+    </div>
+    ${saveRow('twitch')}`);
+
+  const spotify = step(2, c.spotify, 'Spotify-App', `
+    <ol class="howto">
+      <li>Öffne das <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify-Dashboard</a>, melde dich an und klicke auf <b>Create app</b>.</li>
+      <li><b>App name</b> und <b>App description:</b> beliebig</li>
+      <li><b>Redirect URIs:</b> ${copyable(st.redirect.spotify)} einfügen und auf <b>Add</b> klicken</li>
+      <li>Bei „Which API/SDKs …“ <b>Web API</b> ankreuzen, die Bedingungen akzeptieren und auf <b>Save</b> klicken.</li>
+      <li>Oben auf <b>Settings</b>: <b>Client ID</b> kopieren, dann <b>View client secret</b> und das Secret kopieren.</li>
+      <li>Wichtig: Unter <b>User Management</b> deinen Freund mit Namen und <b>der E-Mail seines Spotify-Accounts</b> eintragen, sonst wird sein Login abgelehnt.</li>
+    </ol>
+    <div class="fields">
+      <label>Client-ID<input id="sp_id" data-sec="spotify" autocomplete="off" value="${esc(st.spotify.clientId)}"></label>
+      ${secretField('sp_secret', 'spotify', st.spotify.hasSecret)}
+    </div>
+    ${saveRow('spotify')}`);
+
+  const channels = step(3, c.channels, 'Kanäle und Spotify-Accounts', `
+    <div class="fields">
+      <label>Twitch-Kanäle (mit Komma trennen)
+        <input id="ch_list" data-sec="channels" placeholder="deinkanal, kanaldeinesfreundes" value="${esc(st.channels.join(', '))}"></label>
+      <label>Spotify-Accounts (Namen, mit Komma trennen; der erste ist der Taktgeber)
+        <input id="acc_list" data-sec="channels" value="${esc(st.accounts.join(', '))}"></label>
+    </div>
+    ${saveRow('channels', 'Speichern')}`);
+
+  if (!all) return twitch + spotify + channels;
+
+  const r = st.requests;
+  const rules = step(4, true, 'Regeln für Requests', `
+    <div class="fields">
+      <label>Max. Songs pro Zuschauer<input id="r_user" data-sec="rules" type="number" min="1" value="${r.maxPerUser}"></label>
+      <label>Max. Länge der Warteschlange<input id="r_len" data-sec="rules" type="number" min="1" value="${r.maxQueueLength}"></label>
+      <label>Max. Songdauer (Minuten)<input id="r_dur" data-sec="rules" type="number" min="1" value="${r.maxDurationMinutes}"></label>
+      <label>Verlauf: so viele Songs merken<input id="r_hist" data-sec="rules" type="number" min="1" value="${r.historySize}"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="r_modsBypass" ${r.modsBypassClosed ? 'checked' : ''}>
+      Mods dürfen auch wünschen, wenn Requests geschlossen sind</label>
+    ${saveRow('rules', 'Speichern')}`);
+
+  const ch = st.chat;
+  const chatSec = step(5, true, 'Chat-Nachrichten', `
+    <label class="check"><input type="checkbox" id="c_enabled" ${ch.enabled ? 'checked' : ''}>
+      Bot darf im Chat schreiben (aus = Bot nimmt Requests still an und antwortet nie)</label>
+    <label>„Jetzt läuft“-Ansage senden
+      <select id="r_ann">
+        <option value="first" ${r.announce === 'first' ? 'selected' : ''}>nur im ersten Kanal (ideal mit Shared Chat)</option>
+        <option value="all" ${r.announce === 'all' ? 'selected' : ''}>in allen Kanälen</option>
+        <option value="off" ${r.announce === 'off' ? 'selected' : ''}>gar nicht</option>
+      </select></label>
+    <p class="muted" style="margin:0">Platzhalter: <code>{user}</code> wer schreibt · <code>{song}</code> Titel – Künstler · <code>{title}</code> · <code>{artist}</code> · <code>{pos}</code> Platz ·
+      <code>{requester}</code> wer gewünscht hat · <code>{max}</code> Limit · <code>{query}</code> Suchtext · <code>{url}</code> Spotify-Link · <code>{list}</code> nächste Songs · <code>{target}</code> gesperrter Name.
+      <b>Feld leer lassen = diese Nachricht wird nicht gesendet.</b></p>
+    <details><summary>Alle Nachrichten bearbeiten (${ch.messages.length})</summary>
+      <div style="display:grid; gap:10px; margin-top:10px">
+      ${ch.messages.map((m) => `
+        <div class="msgrow"><span class="muted">${esc(m.label)}</span>
+          <div class="row"><input id="m_${m.key}" data-sec="chat" value="${esc(m.text)}" placeholder="(wird nicht gesendet)">
+            <button title="Standard wiederherstellen" onclick="$('m_${m.key}').value = ${esc(JSON.stringify(m.default))}">↺</button></div>
+        </div>`).join('')}
+      </div>
+    </details>
+    ${saveRow('chat', 'Speichern')}`);
+
+  const blSec = step(6, true, 'Gesperrte Zuschauer', `
+    <p class="muted" style="margin:0">Gesperrte Zuschauer können keine Songs wünschen. Sperren geht auch mit 🚫 in Warteschlange und Verlauf oder per Chat: <code>!srblock name</code> / <code>!srunblock name</code> (nur Mods).</p>
+    <div class="row">${st.blacklist.length ? st.blacklist.map((n) => `<span class="tag">${esc(n)}<button title="entsperren" onclick="post('/api/blacklist', { user:'${esc(n)}', add:false })">✕</button></span>`).join('') : '<span class="muted">Niemand gesperrt.</span>'}</div>
+    <div class="row"><input id="bl_add" data-sec="blacklist" placeholder="Twitch-Name zum Sperren">
+      <button onclick="if ($('bl_add').value.trim()) { post('/api/blacklist', { user: $('bl_add').value, add:true }); $('bl_add').value = ''; }">Sperren</button></div>`);
+
+  return `<p class="muted" style="margin:0">Hinweis: Wenn du eine andere Client-ID einträgst, musst du den Bot bzw. die Spotify-Accounts danach neu verbinden.</p>`
+    + rules + chatSec + blSec + channels + twitch + spotify;
+}
+
+function renderForms(s) {
+  const c = s.configured, all = c.twitch && c.spotify && c.channels;
+  $('setup').classList.toggle('hidden', all);
+  $('dash').classList.toggle('hidden', !all);
+  const host = all ? $('settingsForms') : $('setupForms');
+  const key = JSON.stringify([all, s.settings]);
+  const active = document.activeElement;
+  if (key === formsKey && host.childElementCount) return;
+  if (host.contains(active) && active.tagName !== 'BUTTON') return; // nicht beim Tippen neu zeichnen
+  formsKey = key;
+  // Entwürfe in anderen Abschnitten behalten
+  const drafts = {};
+  document.querySelectorAll('[data-sec]').forEach((el) => {
+    if (el.dataset.sec !== justSaved && el.value && el.type !== 'checkbox') drafts[el.id] = el.value;
+  });
+  $('setupForms').innerHTML = $('settingsForms').innerHTML = '';
+  host.innerHTML = formsHtml(s, all);
+  for (const [id, v] of Object.entries(drafts)) if ($(id)) $(id).value = v;
+  if (justSaved && $('err_' + justSaved)) {
+    $('err_' + justSaved).textContent = 'Gespeichert ✓';
+    $('err_' + justSaved).style.color = 'var(--ok)';
+  }
+  justSaved = null;
+}
+
+async function saveSec(sec) {
+  const v = (id) => $(id).value;
+  const body = {
+    twitch: () => ({ twitch: { clientId: v('tw_id'), clientSecret: v('tw_secret') } }),
+    spotify: () => ({ spotify: { clientId: v('sp_id'), clientSecret: v('sp_secret') } }),
+    channels: () => ({ channels: v('ch_list'), accounts: v('acc_list').split(',') }),
+    rules: () => ({ requests: {
+      maxPerUser: v('r_user'), maxQueueLength: v('r_len'), maxDurationMinutes: v('r_dur'),
+      historySize: v('r_hist'), modsBypassClosed: $('r_modsBypass').checked,
+    } }),
+    chat: () => ({
+      chat: {
+        enabled: $('c_enabled').checked,
+        texts: Object.fromEntries([...document.querySelectorAll('[id^="m_"]')].map((el) => [el.id.slice(2), el.value])),
+      },
+      requests: { announce: v('r_ann') },
+    }),
+  }[sec]();
+  const err = $('err_' + sec);
+  err.style.color = '';
+  err.textContent = 'Prüfe …';
+  const res = await fetch('/api/settings', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) { err.textContent = json.error || 'Fehler beim Speichern'; return; }
+  justSaved = sec;
+  formsKey = '';
+  render(json);
+}
+
+function render(s) {
+  renderForms(s);
+  renderTwitch(s.twitch);
+  if (!document.activeElement?.id?.startsWith('paste')) renderAccounts(s.accounts);
+  renderNow(s);
+  blacklistNow = s.blacklist || [];
+  renderQueue(s.queue, s.queued);
+  renderHistory(s.history || []);
+  $('log').textContent = s.log.slice().reverse().join('\n');
+}
+
+async function refresh() {
+  try { render(await (await fetch('/api/state')).json()); } catch {}
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>
