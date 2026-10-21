@@ -306,6 +306,8 @@ export class TwitchChat extends EventEmitter {
           userId: msg.tags['source-user-id'] || msg.tags['user-id'],
           isMod: /(^|,)(broadcaster|moderator)\//.test(badges),
           isBroadcaster: /(^|,)broadcaster\//.test(badges),
+          // Kanalpunkte-Belohnung mit Texteingabe: Twitch schickt die Eingabe als Chat-Nachricht mit diesem Tag
+          rewardId: msg.tags['custom-reward-id'] || null,
           text: (msg.trailing || '').trim(),
         });
         break;

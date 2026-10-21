@@ -272,6 +272,12 @@ async function handle(req, res) {
         case 'channel':
           room.setUseChannel(user.id, body.use);
           break;
+        case 'reward-learn':
+          room.learnReward(user.id);
+          break;
+        case 'reward-unlink':
+          room.unlinkReward(user.id);
+          break;
         case 'spotify-disconnect':
           room.accounts.find((a) => a.id === user.id)?.disconnect();
           break;

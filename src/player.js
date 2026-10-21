@@ -164,6 +164,7 @@ export class Player extends EventEmitter {
             uri: item.uri,
             name: item.name,
             artists: item.artists?.map((a) => a.name).join(', '),
+            image: (item.album?.images?.[1] || item.album?.images?.[0])?.url || null,
             isPlaying: p.is_playing,
             progressMs: p.progress_ms,
             durationMs: item.duration_ms,

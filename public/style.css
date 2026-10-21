@@ -47,4 +47,27 @@ details summary { cursor:pointer; color:var(--muted); }
 .tag { display:inline-flex; gap:6px; align-items:center; background:#2a2a33; border-radius:999px; padding:2px 4px 2px 10px; font-size:13px; }
 .tag button { padding:0 6px; border-radius:999px; }
 .hidden { display:none !important; }
+h4 { margin:0; font-size:15px; }
+
+/* Einstellungs-Popup */
+.modal { width:min(920px, calc(100vw - 32px)); height:min(680px, calc(100vh - 32px)); padding:0; border:1px solid var(--line); border-radius:14px; background:var(--card); color:var(--text); }
+.modal[open] { display:flex; flex-direction:column; }
+.modal::backdrop { background:rgba(0,0,0,.6); }
+.modal-head { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line); }
+.modal-body { flex:1; display:flex; min-height:0; }
+.modal-nav { width:200px; flex:none; border-right:1px solid var(--line); padding:10px; display:flex; flex-direction:column; gap:4px; overflow:auto; }
+.modal-nav button { text-align:left; background:none; border-color:transparent; display:flex; gap:8px; align-items:center; }
+.modal-nav button.active { background:#2a2a33; border-color:var(--line); }
+.modal-content { flex:1; overflow:auto; padding:18px; }
+.pills { display:flex; gap:6px; flex-wrap:wrap; padding-bottom:4px; border-bottom:1px solid var(--line); }
+.pills button { border-radius:999px; padding:4px 12px; font-size:13px; }
+.pills button.active { background:var(--accent); border-color:var(--accent); }
+@media (max-width: 640px) {
+  .modal { width:100vw; height:100vh; max-width:none; max-height:none; border-radius:0; }
+  .modal-body { flex-direction:column; }
+  .modal-nav { width:auto; flex-direction:row; border-right:none; border-bottom:1px solid var(--line); overflow-x:auto; }
+  .modal-nav button { white-space:nowrap; }
+  .modal-content { padding:14px; }
+}
+
 .badge { font-size:11px; background:#2a2a33; border-radius:999px; padding:1px 8px; color:var(--muted); }

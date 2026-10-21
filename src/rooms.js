@@ -6,7 +6,7 @@ import { roomCode, randomId } from './crypto.js';
 import { SpotifyAuth, SpotifyAccount } from './spotify.js';
 import { Player } from './player.js';
 import { createCommands, aliases } from './commands.js';
-import { MESSAGES, DEFAULT_TEXTS, format, songVars } from './messages.js';
+import { MESSAGES, MESSAGE_GROUPS, DEFAULT_TEXTS, format, songVars } from './messages.js';
 
 const REQUEST_DEFAULTS = {
   maxPerUser: 3,
@@ -15,7 +15,9 @@ const REQUEST_DEFAULTS = {
   announce: 'first',
   historySize: 50,
   modsBypassClosed: false,
+  mode: 'both', // 'command' = nur !sr, 'points' = nur Kanalpunkte, 'both' = beides
 };
+const LEARN_MS = 5 * 60_000;
 
 // Ein Raum: Mitglieder (je mit Twitch-Kanal und Spotify), eine Warteschlange, eigene Einstellungen.
 export class Room {
@@ -31,6 +33,7 @@ export class Room {
     d.history ||= [];
     d.overlayKey ||= randomId(18);
     d.publicPage ??= true;
+    d.overlay = { showAll: false, ...d.overlay }; // showAll: auch Songs ohne Request anzeigen
     this.logLines = [];
     this.auth = new SpotifyAuth(() => d.spotifyApp, config.redirect.spotify);
     this.accounts = [];
@@ -113,19 +116,60 @@ export class Room {
   }
 
   async handleMessage(msg) {
+    if (msg.rewardId) return this.handleRedemption(msg);
     const m = msg.text.match(/^!(\w+)\s*(.*)$/s);
     if (!m) return;
     const name = aliases[m[1].toLowerCase()] || m[1].toLowerCase();
-    const cmd = this.commands[name];
-    if (!cmd) return;
+    if (!this.commands[name]) return;
     this.log(`#${msg.channel} ${msg.user}: ${msg.text.slice(0, 80)}`);
-    const say = (key, vars = {}) => this.sendChat(msg.channel, key, { user: msg.user, ...vars });
+    await this.run(name, msg, m[2].trim());
+  }
+
+  async run(name, msg, args) {
+    let added = false;
+    const say = (key, vars = {}) => {
+      if (key === 'added') added = true;
+      this.sendChat(msg.channel, key, { user: msg.user, ...vars });
+    };
     try {
-      await cmd(msg, m[2].trim(), say);
+      await this.commands[name](msg, args, say);
     } catch (e) {
       this.log(`Fehler bei !${name}: ${e.message}`);
       say('error');
     }
+    if (msg.viaPoints && !added) {
+      say('pointsRefund');
+      this.log(`Kanalpunkte von ${msg.user} bitte zurückerstatten (Wunsch nicht angenommen)`);
+    }
+  }
+
+  // Kanalpunkte-Belohnung mit Texteingabe wurde eingelöst
+  async handleRedemption(msg) {
+    const owner = this.data.members.find((m) => m.login === msg.channel);
+    if (!owner) return;
+    if (this.learning?.memberId === owner.id && Date.now() < this.learning.until) {
+      owner.rewardId = msg.rewardId;
+      this.learning = null;
+      this.save();
+      this.log(`Kanalpunkte-Belohnung für #${msg.channel} verknüpft`);
+      return;
+    }
+    if (owner.rewardId !== msg.rewardId || this.data.requests.mode === 'command') return;
+    this.log(`#${msg.channel} ${msg.user} (Kanalpunkte): ${msg.text.slice(0, 80)}`);
+    await this.run('sr', { ...msg, viaPoints: true }, msg.text);
+  }
+
+  learnReward(userId) {
+    if (!this.member(userId)) return;
+    this.learning = { memberId: userId, until: Date.now() + LEARN_MS };
+  }
+
+  unlinkReward(userId) {
+    const m = this.member(userId);
+    if (!m) return;
+    m.rewardId = null;
+    if (this.learning?.memberId === userId) this.learning = null;
+    this.save();
   }
 
   onNowPlaying(c) {
@@ -179,6 +223,7 @@ export class Room {
       s.historySize = num(r.historySize, 1, 500, s.historySize);
       if (['first', 'all', 'off'].includes(r.announce)) s.announce = r.announce;
       if ('modsBypassClosed' in r) s.modsBypassClosed = !!r.modsBypassClosed;
+      if (['command', 'points', 'both'].includes(r.mode)) s.mode = r.mode;
       d.history.length = Math.min(d.history.length, s.historySize);
     }
     if (body.chat) {
@@ -191,6 +236,7 @@ export class Room {
       }
     }
     if ('publicPage' in body) d.publicPage = !!body.publicPage;
+    if (body.overlay && 'showAll' in body.overlay) d.overlay.showAll = !!body.overlay.showAll;
     this.save();
   }
 
@@ -222,6 +268,8 @@ export class Room {
           displayName: m.displayName,
           image: m.image,
           useChannel: !!m.useChannel,
+          rewardLinked: !!m.rewardId,
+          learning: this.learning?.memberId === m.id && Date.now() < this.learning.until,
           isOwner: m.id === d.ownerId,
           isMe: m.id === userId,
           spotify: { connected: acc.connected, displayName: m.spotify?.displayName, product: m.spotify?.product, error: acc.error },
@@ -243,8 +291,10 @@ export class Room {
         chat: {
           enabled: d.chat.enabled,
           messages: MESSAGES.map((m) => ({ key: m.key, label: m.label, default: m.text, text: this.text(m.key) })),
+          groups: MESSAGE_GROUPS,
         },
         publicPage: d.publicPage,
+        overlay: d.overlay,
         blacklist: d.blacklist,
       },
       links: {
@@ -268,8 +318,17 @@ export class Room {
       current: strip(this.player.current),
       queued: strip(this.player.queued),
       queue: this.player.queue.slice(0, 20).map(strip),
-      playback: p && { uri: p.uri, progressMs: p.progressMs, durationMs: p.durationMs, isPlaying: p.isPlaying },
-      currentUri: this.player.current?.uri,
+      // Was wirklich gerade läuft (auch ohne Request); requested = es ist der aktuelle Request
+      playback: p && {
+        name: p.name,
+        artists: p.artists,
+        image: p.image,
+        progressMs: p.progressMs,
+        durationMs: p.durationMs,
+        isPlaying: p.isPlaying,
+        requested: !!this.player.current && p.uri === this.player.current.uri,
+      },
+      overlayShowAll: this.data.overlay.showAll,
     };
   }
 

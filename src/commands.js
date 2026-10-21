@@ -12,11 +12,14 @@ export function createCommands({ player, accounts, settings, blacklist }) {
   return {
     async sr(msg, args, say) {
       if (blacklist.has(msg.login) || blacklist.has(msg.user)) return say('blacklisted');
+      // Nur über Kanalpunkte: !sr im Chat geht dann nur noch für Mods
+      if (settings.mode === 'points' && !msg.viaPoints && !msg.isMod) return say('pointsOnly');
       if (!args) return say('usage');
       if (!player.open && !(settings.modsBypassClosed && msg.isMod)) return say('closed');
       const searcher = accounts.find((a) => a.connected);
       if (!searcher) return say('notConnected');
-      if (!msg.isBroadcaster && mine(msg.userId).length >= settings.maxPerUser) {
+      // Mit Kanalpunkten bezahlte Wünsche zählen nicht zum Limit pro Zuschauer
+      if (!msg.isBroadcaster && !msg.viaPoints && mine(msg.userId).length >= settings.maxPerUser) {
         return say('userLimit', { max: settings.maxPerUser });
       }
       if (player.queue.length >= settings.maxQueueLength) return say('queueFull');

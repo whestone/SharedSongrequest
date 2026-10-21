@@ -10,7 +10,7 @@
 <main>
   <div class="row spread">
     <div class="row"><a class="btn" href="/">←</a><h1>Raum <span id="code" class="code-big" style="font-size:22px"></span></h1></div>
-    <div class="row"><span id="botStatus" class="muted"></span><button onclick="logout()">Abmelden</button></div>
+    <div class="row"><span id="botStatus" class="muted"></span><button class="primary" onclick="openSettings()">⚙ Einstellungen</button><button onclick="logout()">Abmelden</button></div>
   </div>
   <div id="fatal" class="card err hidden"></div>
 
@@ -64,17 +64,21 @@
   </section>
 
   <section class="card">
-    <details id="settingsBox">
-      <summary style="font-size:15px">⚙ Einstellungen</summary>
-      <div id="settings" class="stack" style="gap:16px; margin-top:16px"></div>
-    </details>
-  </section>
-
-  <section class="card">
     <h2>Log</h2>
     <pre id="log"></pre>
   </section>
 </main>
+
+<dialog id="settingsDlg" class="modal" aria-labelledby="settingsTitle">
+  <div class="modal-head">
+    <h3 id="settingsTitle">⚙ Einstellungen</h3>
+    <button onclick="closeSettings()" aria-label="Schließen">✕</button>
+  </div>
+  <div class="modal-body">
+    <nav id="settingsNav" class="modal-nav"></nav>
+    <div id="settings" class="modal-content"></div>
+  </div>
+</dialog>
 
 <script src="/common.js"></script>
 <script>
@@ -130,6 +134,11 @@ function renderMembers(v) {
       <div class="row"><span class="dot ${m.useChannel ? 'on' : ''}"></span>
         <span class="muted">${m.useChannel ? 'Requests aus diesem Kanal' : 'Kanal nicht aktiv'}</span>
         ${m.isMe ? `<button onclick="act('channel', { use: ${!m.useChannel} })">${m.useChannel ? 'Deaktivieren' : 'Aktivieren'}</button>` : ''}</div>
+      ${m.useChannel && v.settings.requests.mode !== 'command' ? `<div class="row"><span class="dot ${m.rewardLinked ? 'on' : ''}"></span>
+        <span class="muted">${m.learning ? '⏳ Löse die Belohnung jetzt einmal in deinem Kanal ein …' : m.rewardLinked ? 'Kanalpunkte-Belohnung verknüpft' : 'Keine Kanalpunkte-Belohnung'}</span>
+        ${m.isMe ? (m.rewardLinked
+          ? `<button onclick="act('reward-unlink')">Lösen</button>`
+          : `<button onclick="act('reward-learn')">${m.learning ? 'Neu starten' : 'Verknüpfen'}</button>`) : ''}</div>` : ''}
       <div class="row"><span class="dot ${m.spotify.connected ? 'on' : ''}"></span>
         <span class="muted">${m.spotify.connected ? `Spotify: ${esc(m.spotify.displayName)} (${esc(m.spotify.product || '?')})` : 'Spotify nicht verbunden'}
         ${m.spotify.connected && v.members.filter((x) => x.spotify.connected)[0]?.id === m.id ? ' · Taktgeber' : ''}</span></div>
@@ -204,54 +213,140 @@ function saveRow(sec, label = 'Speichern') {
   return `<div class="row"><button class="primary" onclick="saveSec('${sec}')">${label}</button><span class="err" id="err_${sec}"></span></div>`;
 }
 
+// Menü der Einstellungen: Bereiche links, darin Unterbereiche
+const SETTINGS_TABS = [
+  { id: 'requests', icon: '🎵', label: 'Requests' },
+  { id: 'chat', icon: '💬', label: 'Chat' },
+  { id: 'blacklist', icon: '🚫', label: 'Sperrliste' },
+  { id: 'links', icon: '🔗', label: 'Overlay & Links' },
+  { id: 'spotify', icon: '🎧', label: 'Spotify-App', ownerOnly: true },
+  { id: 'room', icon: '🚪', label: 'Raum' },
+];
+const store = {
+  get: (k, d) => { try { return localStorage.getItem(k) || d; } catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+};
+let settingsTab = store.get('sr_settings_tab', 'requests');
+let chatGroup = store.get('sr_chat_group', 'general');
+
+function openSettings(tab) {
+  if (tab) settingsTab = tab;
+  showTab();
+  $('settingsDlg').showModal();
+}
+function closeSettings() {
+  $('settingsDlg').close();
+}
+
+function showTab(tab = settingsTab) {
+  const tabs = visibleTabs(view);
+  if (!tabs.some((t) => t.id === tab)) tab = tabs[0].id;
+  settingsTab = tab;
+  store.set('sr_settings_tab', tab);
+  document.querySelectorAll('#settingsNav button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  document.querySelectorAll('#settings [data-panel]').forEach((p) => p.classList.toggle('hidden', p.dataset.panel !== tab));
+  showChatGroup();
+}
+
+function showChatGroup(g = chatGroup) {
+  chatGroup = g;
+  store.set('sr_chat_group', g);
+  document.querySelectorAll('#chatGroups button').forEach((b) => b.classList.toggle('active', b.dataset.group === g));
+  document.querySelectorAll('#settings div[data-group]').forEach((p) => p.classList.toggle('hidden', p.dataset.group !== g));
+}
+
+const visibleTabs = (v) => SETTINGS_TABS.filter((t) => (!t.ownerOnly || v.me.isOwner) && (t.id !== 'spotify' || v.spotifyReady));
+
+function section(title, hint, body) {
+  return `<div class="stack"><div><h4>${title}</h4>${hint ? `<p class="muted" style="margin:2px 0 0">${hint}</p>` : ''}</div>${body}</div>`;
+}
+
 function settingsHtml(v) {
   const st = v.settings, r = st.requests, ch = st.chat;
-  return `
-  <div class="stack"><h3>Regeln</h3>
-    <div class="fields">
-      <label>Max. Songs pro Zuschauer<input id="r_user" data-sec="rules" type="number" min="1" value="${r.maxPerUser}"></label>
-      <label>Max. Länge der Warteschlange<input id="r_len" data-sec="rules" type="number" min="1" value="${r.maxQueueLength}"></label>
-      <label>Max. Songdauer (Minuten)<input id="r_dur" data-sec="rules" type="number" min="1" value="${r.maxDurationMinutes}"></label>
-      <label>Verlauf: so viele Songs merken<input id="r_hist" data-sec="rules" type="number" min="1" value="${r.historySize}"></label>
-    </div>
-    <label class="check"><input type="checkbox" id="r_bypass" ${r.modsBypassClosed ? 'checked' : ''}> Mods dürfen auch wünschen, wenn Requests geschlossen sind</label>
-    <label class="check"><input type="checkbox" id="r_public" ${st.publicPage ? 'checked' : ''}> Öffentliche Zuschauer-Seite mit Warteschlange</label>
-    ${saveRow('rules')}</div>
+  const msgs = Object.fromEntries(ch.messages.map((m) => [m.key, m]));
+  const msgInput = (m) => `<div class="stack" style="gap:4px"><span class="muted">${esc(m.label)}</span>
+    <div class="row"><input id="m_${m.key}" data-sec="chat" value="${esc(m.text)}" placeholder="(wird nicht gesendet)">
+      <button title="Standardtext" onclick="$('m_${m.key}').value = ${esc(JSON.stringify(m.default))}">↺</button></div></div>`;
+  const groups = [{ id: 'general', label: 'Allgemein' }, ...ch.groups];
 
-  <div class="stack"><h3>Chat-Nachrichten</h3>
-    <label class="check"><input type="checkbox" id="c_enabled" ${ch.enabled ? 'checked' : ''}> Bot darf im Chat schreiben (aus = Requests still annehmen)</label>
-    <label>„Jetzt läuft“-Ansage
-      <select id="r_ann">
-        <option value="first" ${r.announce === 'first' ? 'selected' : ''}>nur im Kanal des Besitzers (ideal mit Shared Chat)</option>
-        <option value="all" ${r.announce === 'all' ? 'selected' : ''}>in allen Kanälen</option>
-        <option value="off" ${r.announce === 'off' ? 'selected' : ''}>gar nicht</option>
-      </select></label>
-    <p class="muted" style="margin:0">Platzhalter: <code>{user}</code> <code>{song}</code> <code>{title}</code> <code>{artist}</code> <code>{pos}</code> <code>{requester}</code> <code>{max}</code> <code>{query}</code> <code>{url}</code> <code>{list}</code> <code>{target}</code>. <b>Leeres Feld = Nachricht wird nicht gesendet.</b></p>
-    <details><summary>Alle Nachrichten bearbeiten (${ch.messages.length})</summary>
-      <div class="stack" style="margin-top:10px">
-      ${ch.messages.map((m) => `<div class="stack" style="gap:4px"><span class="muted">${esc(m.label)}</span>
-        <div class="row"><input id="m_${m.key}" data-sec="chat" value="${esc(m.text)}" placeholder="(wird nicht gesendet)">
-          <button title="Standard" onclick="$('m_${m.key}').value = ${esc(JSON.stringify(m.default))}">↺</button></div></div>`).join('')}
-      </div></details>
-    ${saveRow('chat')}</div>
+  const panels = {
+    requests: `
+      ${section('Limits', 'Gilt für alle Zuschauer, der Broadcaster ist bei „pro Zuschauer“ ausgenommen.', `
+        <div class="fields">
+          <label>Max. Songs pro Zuschauer<input id="r_user" data-sec="rules" type="number" min="1" value="${r.maxPerUser}"></label>
+          <label>Max. Länge der Warteschlange<input id="r_len" data-sec="rules" type="number" min="1" value="${r.maxQueueLength}"></label>
+          <label>Max. Songdauer (Minuten)<input id="r_dur" data-sec="rules" type="number" min="1" value="${r.maxDurationMinutes}"></label>
+        </div>`)}
+      ${section('Wie wünschen Zuschauer?', '', `
+        <select id="r_mode" data-sec="rules">
+          <option value="both" ${r.mode === 'both' ? 'selected' : ''}>Mit !sr im Chat oder mit Kanalpunkten</option>
+          <option value="command" ${r.mode === 'command' ? 'selected' : ''}>Nur mit !sr im Chat</option>
+          <option value="points" ${r.mode === 'points' ? 'selected' : ''}>Nur mit Kanalpunkten (!sr nur noch für Mods)</option>
+        </select>
+        <details><summary>So richtest du die Kanalpunkte-Belohnung ein</summary>
+          <ol class="howto" style="margin-top:8px">
+            <li>Im <a href="https://dashboard.twitch.tv/viewer-rewards/channel-points/rewards" target="_blank" rel="noopener">Twitch-Dashboard</a> unter <b>Kanalpunkte → Eigene Belohnung</b> eine Belohnung anlegen, z. B. „Songrequest“.</li>
+            <li><b>„Zuschauer muss Text eingeben“</b> einschalten. Dort schreiben Zuschauer Songname oder Link hinein.</li>
+            <li>Kosten nach Wunsch. „Anfragenwarteschlange überspringen“ am besten <b>aus</b> lassen, dann kann ein Mod bei Fehlern die Punkte zurückgeben.</li>
+            <li>Hier im Raum bei deiner Karte auf <b>Verknüpfen</b> klicken und die Belohnung innerhalb von 5 Minuten einmal selbst einlösen.</li>
+          </ol>
+          <p class="muted">Klappt ein Wunsch nicht (Song nicht gefunden, Warteschlange voll …), sagt der Bot im Chat Bescheid. Die Punkte gibt Twitch aber nicht automatisch zurück. Das macht ein Mod in der Anfragenwarteschlange. Kanalpunkte-Wünsche zählen nicht zum Limit pro Zuschauer.</p>
+        </details>`)}
+      ${section('Wenn Requests geschlossen sind', '', `
+        <label class="check"><input type="checkbox" id="r_bypass" ${r.modsBypassClosed ? 'checked' : ''}> Mods dürfen trotzdem wünschen</label>`)}
+      ${section('Verlauf', '', `
+        <div class="fields"><label>So viele Songs merken<input id="r_hist" data-sec="rules" type="number" min="1" value="${r.historySize}"></label></div>`)}
+      ${saveRow('rules')}`,
 
-  <div class="stack"><h3>Gesperrte Zuschauer</h3>
-    <p class="muted" style="margin:0">Auch mit 🚫 in Warteschlange/Verlauf oder per Chat: <code>!srblock name</code> / <code>!srunblock name</code> (Mods).</p>
-    <div class="row">${st.blacklist.length ? st.blacklist.map((n) => `<span class="tag">${esc(n)}<button onclick="act('blacklist', { user:'${esc(n)}', add:false })">✕</button></span>`).join('') : '<span class="muted">Niemand gesperrt.</span>'}</div>
-    <div class="row"><input id="bl_add" data-sec="blacklist" placeholder="Twitch-Name">
-      <button onclick="if ($('bl_add').value.trim()) { act('blacklist', { user: $('bl_add').value, add:true }); $('bl_add').value = ''; }">Sperren</button></div></div>
+    chat: `
+      <div class="pills" id="chatGroups">${groups.map((g) => `<button data-group="${g.id}" onclick="showChatGroup('${g.id}')">${esc(g.label)}</button>`).join('')}</div>
+      <div data-group="general" class="stack">
+        ${section('Bot im Chat', '', `<label class="check"><input type="checkbox" id="c_enabled" ${ch.enabled ? 'checked' : ''}> Bot darf im Chat schreiben (aus = Requests still annehmen, nie antworten)</label>`)}
+        ${section('„Jetzt läuft“-Ansage', 'Den Text dazu findest du unter „Ansagen“.', `
+          <select id="r_ann">
+            <option value="first" ${r.announce === 'first' ? 'selected' : ''}>nur im Kanal des Besitzers (ideal mit Shared Chat)</option>
+            <option value="all" ${r.announce === 'all' ? 'selected' : ''}>in allen Kanälen</option>
+            <option value="off" ${r.announce === 'off' ? 'selected' : ''}>gar nicht</option>
+          </select>`)}
+        ${section('Platzhalter für Nachrichten', '', `<p class="muted" style="margin:0">
+          <code>{user}</code> wer schreibt · <code>{song}</code> Titel – Künstler · <code>{title}</code> · <code>{artist}</code> · <code>{pos}</code> Platz ·
+          <code>{requester}</code> wer gewünscht hat · <code>{max}</code> Limit · <code>{query}</code> Suchtext · <code>{url}</code> Spotify-Link ·
+          <code>{list}</code> nächste Songs · <code>{target}</code> gesperrter Name<br><b>Leeres Feld = diese Nachricht wird nicht gesendet.</b> ↺ stellt den Standard wieder her.</p>`)}
+      </div>
+      ${ch.groups.map((g) => `<div data-group="${g.id}" class="stack hidden">${g.keys.map((k) => msgInput(msgs[k])).join('')}</div>`).join('')}
+      ${saveRow('chat')}`,
 
-  ${v.me.isOwner && v.spotifyReady ? `<div class="stack"><h3>Spotify-App</h3>
-    <p class="muted" style="margin:0">Achtung: Eine andere Client-ID trennt alle Spotify-Logins im Raum.</p>
-    ${spotifyAppForm(v)}</div>` : ''}
+    blacklist: section('Gesperrte Zuschauer', 'Gesperrte können keine Songs wünschen. Sperren geht auch mit 🚫 in Warteschlange und Verlauf oder per Chat: <code>!srblock name</code> / <code>!srunblock name</code> (Mods).', `
+      <div class="row">${st.blacklist.length ? st.blacklist.map((n) => `<span class="tag">${esc(n)}<button title="entsperren" onclick="act('blacklist', { user:'${esc(n)}', add:false })">✕</button></span>`).join('') : '<span class="muted">Niemand gesperrt.</span>'}</div>
+      <div class="row"><input id="bl_add" data-sec="blacklist" placeholder="Twitch-Name">
+        <button onclick="if ($('bl_add').value.trim()) { act('blacklist', { user: $('bl_add').value, add:true }); $('bl_add').value = ''; }">Sperren</button></div>`),
 
-  <div class="stack"><h3>Raum verlassen</h3>
-    <div class="row">
-      ${v.me.isOwner
-        ? `<button onclick="confirm('Neuen Overlay-Link erzeugen? Der alte funktioniert dann nicht mehr.') && act('overlay-reset')">Overlay-Link erneuern</button>
-           <button class="danger" onclick="confirm('Raum ${esc(v.code)} endgültig löschen? Warteschlange, Verlauf und Logins gehen verloren.') && act('delete')">Raum löschen</button>`
-        : `<button class="danger" onclick="confirm('Raum verlassen?') && act('leave')">Raum verlassen</button>`}
-    </div></div>`;
+    links: `
+      ${section('Zuschauer-Seite', 'Zeigt aktuellen Song und Warteschlange, ohne Login. Darf öffentlich geteilt werden.', `
+        <label class="check"><input type="checkbox" id="r_public" ${st.publicPage ? 'checked' : ''}> Zuschauer-Seite einschalten</label>
+        ${saveRow('links')}`)}
+      ${section('OBS-Overlay', 'Browserquelle mit 600 × 220. Der Link enthält einen geheimen Schlüssel.', `
+        <label class="check"><input type="checkbox" id="o_all" ${st.overlay.showAll ? 'checked' : ''}> Auch Songs anzeigen, die niemand gewünscht hat (dann ohne „gewünscht von“)</label>
+        <p class="muted" style="margin:0">Aus: Das Overlay erscheint nur, während ein Request läuft.</p>
+        ${saveRow('overlay')}
+        <div class="row"><button onclick="copyText(view.links.overlay, this)">Overlay-Link kopieren</button>
+          <a class="btn" href="${esc(v.links.overlay)}" target="_blank">Vorschau</a>
+          ${v.me.isOwner ? `<button onclick="confirm('Neuen Overlay-Link erzeugen? Der alte funktioniert dann nicht mehr.') && act('overlay-reset')">Link erneuern</button>` : ''}</div>`)}`,
+
+    spotify: v.me.isOwner && v.spotifyReady
+      ? section('Spotify-App', 'Achtung: Eine andere Client-ID trennt alle Spotify-Logins im Raum.', spotifyAppForm(v))
+      : '',
+
+    room: v.me.isOwner
+      ? section('Raum löschen', 'Warteschlange, Verlauf und alle Logins in diesem Raum gehen verloren.', `
+          <div><button class="danger" onclick="confirm('Raum ${esc(v.code)} endgültig löschen?') && act('delete')">Raum ${esc(v.code)} löschen</button></div>`)
+      : section('Raum verlassen', 'Dein Kanal und dein Spotify werden aus dem Raum entfernt.', `
+          <div><button class="danger" onclick="confirm('Raum verlassen?') && act('leave')">Raum verlassen</button></div>`),
+  };
+
+  $('settingsNav').innerHTML = visibleTabs(v)
+    .map((t) => `<button data-tab="${t.id}" onclick="showTab('${t.id}')"><span>${t.icon}</span> ${esc(t.label)}</button>`).join('');
+  return visibleTabs(v).map((t) => `<div data-panel="${t.id}" class="stack hidden" style="gap:18px">${panels[t.id]}</div>`).join('');
 }
 
 function renderForms(v) {
@@ -259,7 +354,7 @@ function renderForms(v) {
   const key = JSON.stringify([v.spotifyReady, v.me, v.settings]);
   const active = document.activeElement;
   if (key === formsKey && host.childElementCount) return;
-  if ((host.contains(active) || $('settings').contains(active)) && active.tagName !== 'BUTTON') return;
+  if (($('setup').contains(active) || $('settingsDlg').contains(active)) && !['BUTTON', 'DIALOG'].includes(active.tagName)) return;
   formsKey = key;
   const drafts = {};
   document.querySelectorAll('[data-sec]').forEach((el) => { if (el.value && el.type !== 'checkbox') drafts[el.id] = el.value; });
@@ -269,6 +364,7 @@ function renderForms(v) {
   for (const [id, val] of Object.entries(drafts)) if ($(id) && !saved.has($(id).dataset.sec)) $(id).value = val;
   for (const sec of saved) if ($('err_' + sec)) { $('err_' + sec).textContent = 'Gespeichert ✓'; $('err_' + sec).className = 'ok'; }
   saved.clear();
+  showTab();
 }
 
 const saved = new Set();
@@ -276,7 +372,9 @@ async function saveSec(sec) {
   const v = (id) => $(id).value;
   const body = {
     spotify: () => ({ spotifyApp: { clientId: v('sp_id'), clientSecret: v('sp_secret') } }),
-    rules: () => ({ requests: { maxPerUser: v('r_user'), maxQueueLength: v('r_len'), maxDurationMinutes: v('r_dur'), historySize: v('r_hist'), modsBypassClosed: $('r_bypass').checked }, publicPage: $('r_public').checked }),
+    rules: () => ({ requests: { maxPerUser: v('r_user'), maxQueueLength: v('r_len'), maxDurationMinutes: v('r_dur'), historySize: v('r_hist'), modsBypassClosed: $('r_bypass').checked, mode: v('r_mode') } }),
+    links: () => ({ publicPage: $('r_public').checked }),
+    overlay: () => ({ overlay: { showAll: $('o_all').checked } }),
     chat: () => ({ chat: { enabled: $('c_enabled').checked, texts: Object.fromEntries([...document.querySelectorAll('[id^="m_"]')].map((el) => [el.id.slice(2), el.value])) }, requests: { announce: v('r_ann') } }),
   }[sec]();
   const err = $('err_' + sec);
@@ -321,6 +419,8 @@ async function refresh() {
     $('fatal').classList.remove('hidden');
   }
 }
+// Klick neben das Popup schließt es
+$('settingsDlg').addEventListener('click', (e) => { if (e.target === $('settingsDlg')) closeSettings(); });
 refresh();
 setInterval(refresh, 2000);
 </script>

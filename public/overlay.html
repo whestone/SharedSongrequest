@@ -28,13 +28,19 @@ async function refresh() {
     if (!res.ok) return;
     const s = await res.json();
     const c = s.current, p = s.playback, box = document.getElementById('box');
-    if (!c) { box.className = 'box'; return; }
+    // Welcher Song wird gezeigt? Ein laufender Request immer, sonst je nach Einstellung
+    // auch der Song, der gerade ohne Request läuft.
+    let show = null;
+    if (c && (!p || p.requested || !s.overlayShowAll)) show = c;
+    else if (s.overlayShowAll && p && p.isPlaying) show = { ...p, user: null };
+    if (!show) { box.className = 'box'; return; }
     const next = [s.queued, ...s.queue].filter(Boolean).slice(0, 2).map((e) => `${esc(e.name)} (${esc(e.user)})`).join(' · ');
-    const pct = p && p.durationMs ? (p.progressMs / p.durationMs) * 100 : 0;
+    const playing = p && (p.requested || !show.user);
+    const pct = playing && p.durationMs ? (p.progressMs / p.durationMs) * 100 : 0;
     box.className = 'box show';
-    box.innerHTML = `${c.image ? `<img src="${esc(c.image)}" alt="">` : ''}<div>
-      <div class="title">${esc(c.name)}</div><div>${esc(c.artists)}</div>
-      <div class="who">🎵 gewünscht von ${esc(c.user)}</div>
+    box.innerHTML = `${show.image ? `<img src="${esc(show.image)}" alt="">` : ''}<div>
+      <div class="title">${esc(show.name)}</div><div>${esc(show.artists)}</div>
+      ${show.user ? `<div class="who">🎵 gewünscht von ${esc(show.user)}</div>` : ''}
       ${next ? `<div class="next">Als Nächstes: ${next}</div>` : ''}
       <div class="bar"><div style="width:${pct}%"></div></div></div>`;
   } catch {}

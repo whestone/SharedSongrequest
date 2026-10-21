@@ -27,11 +27,24 @@ export const MESSAGES = [
   { key: 'closedNow', label: '!srclose', text: 'Songrequests sind geschlossen.' },
   { key: 'blocked', label: '!srblock', text: '@{user} {target} darf keine Songs mehr wünschen.' },
   { key: 'unblocked', label: '!srunblock', text: '@{user} {target} darf wieder Songs wünschen.' },
+  { key: 'pointsOnly', label: '!sr, obwohl nur Kanalpunkte erlaubt', text: '@{user} Songs wünschst du dir hier mit Kanalpunkten.' },
+  { key: 'pointsRefund', label: 'Kanalpunkte-Wunsch fehlgeschlagen', text: '@{user} Das hat nicht geklappt, deine Kanalpunkte gibt dir ein Mod zurück.' },
   { key: 'notConnected', label: 'Spotify nicht verbunden', text: '@{user} Spotify ist noch nicht verbunden.' },
   { key: 'error', label: 'Fehler', text: '@{user} Da ist etwas schiefgelaufen, versuch es nochmal.' },
 ];
 
 export const DEFAULT_TEXTS = Object.fromEntries(MESSAGES.map((m) => [m.key, m.text]));
+
+// Gruppen für die Einstellungen
+export const MESSAGE_GROUPS = [
+  { id: 'requests', label: 'Song-Wünsche', keys: ['added', 'duplicate', 'notFound', 'tooLong', 'usage', 'badLink', 'ytNotFound', 'ytNoMatch'] },
+  { id: 'limits', label: 'Limits & Sperren', keys: ['userLimit', 'queueFull', 'closed', 'blacklisted'] },
+  { id: 'points', label: 'Kanalpunkte', keys: ['pointsOnly', 'pointsRefund'] },
+  { id: 'announce', label: 'Ansagen', keys: ['nowPlaying'] },
+  { id: 'viewer', label: 'Zuschauer-Befehle', keys: ['song', 'songNoRequest', 'nothingPlaying', 'queue', 'queueEmpty', 'removed', 'nothingToRemove'] },
+  { id: 'mod', label: 'Mod-Befehle', keys: ['skipped', 'opened', 'closedNow', 'blocked', 'unblocked'] },
+  { id: 'system', label: 'System', keys: ['notConnected', 'error'] },
+];
 
 export function format(template, vars) {
   return template.replace(/\{(\w+)\}/g, (all, k) => (vars[k] != null ? String(vars[k]) : all)).trim();

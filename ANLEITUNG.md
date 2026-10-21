@@ -49,17 +49,33 @@ Der Twitch-Kanal jedes Mitglieds wird automatisch Teil des Raums. Requests aus a
 | `!sropen` / `!srclose` | Mods | Requests öffnen oder schließen |
 | `!srblock name` / `!srunblock name` | Mods | Zuschauer sperren oder entsperren |
 
+### Songs mit Kanalpunkten
+
+Unter **⚙ Einstellungen → Requests** legst du fest, wie Zuschauer wünschen:
+- nur mit `!sr`
+- nur mit Kanalpunkten (`!sr` geht dann nur noch für Mods)
+- mit beidem
+
+So richtest du die Belohnung ein:
+
+1. Im Twitch-Dashboard unter **Kanalpunkte → Eigene Belohnung** eine Belohnung anlegen und **„Zuschauer muss Text eingeben“** einschalten.
+2. Im Raum bei deiner Karte auf **Verknüpfen** klicken und die Belohnung innerhalb von 5 Minuten einmal selbst einlösen.
+
+Jedes Mitglied verknüpft die Belohnung in seinem eigenen Kanal. Kanalpunkte-Wünsche zählen nicht zum Limit pro Zuschauer. Klappt ein Wunsch nicht, sagt der Bot das im Chat. Die Punkte gibt ein Mod in der Anfragenwarteschlange von Twitch zurück, das passiert nicht automatisch.
+
 ### Im Raum
 
 - **Warteschlange:** verschieben, entfernen, Zuschauer mit 🚫 sperren
 - **Verlauf:** die letzten Songs mit Wünscher. Mit ↻ reihst du einen Song nochmal ein.
-- **⚙ Einstellungen:**
-  - Limits und Verlaufslänge
-  - Chat-Nachrichten mit Platzhaltern. Ein leeres Feld bedeutet, dass diese Nachricht nicht gesendet wird. Mit dem Stumm-Schalter schreibt der Bot gar nicht in den Chat.
-  - Sperrliste
-  - Zuschauer-Seite ein- oder ausschalten
+- **⚙ Einstellungen** (eigenes Fenster mit Menü):
+  - **Requests:** Limits, Kanalpunkte oder `!sr`, Verlaufslänge
+  - **Chat:** Stumm-Schalter, „Jetzt läuft“-Ansage, alle Nachrichten nach Bereichen sortiert. Ein leeres Feld bedeutet, dass diese Nachricht nicht gesendet wird.
+  - **Sperrliste**
+  - **Overlay & Links:** Zuschauer-Seite, und ob das Overlay auch Songs ohne Request zeigt
+  - **Spotify-App** (Besitzer) und **Raum** (verlassen oder löschen)
 
 ### Links
 
 - **OBS-Overlay:** „Overlay-Link kopieren“, dann in OBS eine Browserquelle mit 600 × 220 anlegen. Der Link enthält einen geheimen Schlüssel, also nicht öffentlich teilen. Der Besitzer kann ihn erneuern.
+  - Normalerweise erscheint das Overlay nur, während ein Request läuft. Mit „Auch Songs anzeigen, die niemand gewünscht hat“ zeigt es immer den aktuellen Spotify-Song, dann ohne „gewünscht von“.
 - **Zuschauer-Seite:** zeigt aktuellen Song und Warteschlange. Den Link kannst du z. B. in die Stream-Beschreibung oder einen `!queue`-Befehl packen.
