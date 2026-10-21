@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Songrequests live</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <h1>🎵 Songrequests <span id="channels" class="muted" style="font-size:15px"></span></h1>
+  <div id="missing" class="card muted hidden">Diese Seite gibt es nicht oder sie ist ausgeschaltet.</div>
+  <section class="card" id="nowBox">
+    <h2>Jetzt läuft</h2>
+    <div id="now"></div>
+  </section>
+  <section class="card">
+    <h2>Als Nächstes <span id="status" class="badge"></span></h2>
+    <ol class="list" id="queue"></ol>
+    <p class="muted">Wünsch dir einen Song im Chat mit <code>!sr Songname</code>, einem Spotify- oder YouTube-Link.</p>
+  </section>
+</main>
+<script src="/common.js"></script>
+<script>
+const CODE = location.pathname.split('/')[2];
+async function refresh() {
+  const res = await fetch(`/api/live/${CODE}`);
+  if (!res.ok) { $('missing').classList.remove('hidden'); return; }
+  const s = await res.json();
+  $('channels').textContent = s.channels.map((c) => '#' + c).join(' · ');
+  $('status').textContent = s.open ? 'Requests offen' : 'Requests geschlossen';
+  const c = s.current, p = s.playback;
+  $('now').innerHTML = c ? `<div class="now">${c.image ? `<img src="${esc(c.image)}" alt="">` : ''}<div style="flex:1">
+      <div class="title">${esc(c.name)}</div><div>${esc(c.artists)}</div><div class="muted">gewünscht von ${esc(c.user)}</div>
+      ${p ? `<div class="bar"><div style="width:${(p.progressMs / p.durationMs) * 100}%"></div></div>` : ''}</div></div>`
+    : '<p class="muted">Gerade läuft kein Request.</p>';
+  const list = [s.queued, ...s.queue].filter(Boolean);
+  $('queue').innerHTML = list.length ? list.map((e, i) => `<li>${e.image ? `<img src="${esc(e.image)}" alt="">` : ''}
+      <div class="info"><div><b>${i + 1}. ${esc(e.name)}</b> – ${esc(e.artists)}</div><div class="muted">${esc(e.user)} · ${time(e.durationMs)}</div></div></li>`).join('')
+    : '<p class="muted">Die Warteschlange ist leer.</p>';
+}
+refresh().catch(() => {});
+setInterval(() => refresh().catch(() => {}), 4000);
+</script>
+</body>
+</html>

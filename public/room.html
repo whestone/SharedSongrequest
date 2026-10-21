@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raum – Shared Songrequest</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <div class="row spread">
+    <div class="row"><a class="btn" href="/">←</a><h1>Raum <span id="code" class="code-big" style="font-size:22px"></span></h1></div>
+    <div class="row"><span id="botStatus" class="muted"></span><button onclick="logout()">Abmelden</button></div>
+  </div>
+  <div id="fatal" class="card err hidden"></div>
+
+  <!-- Einrichtung der Spotify-App (nur solange sie fehlt) -->
+  <section id="setup" class="card stack hidden"></section>
+
+  <div class="grid">
+    <section class="card stack">
+      <h2 style="margin:0">Freunde einladen</h2>
+      <div class="row"><span class="code-big" id="inviteCode"></span><button onclick="copyText(view.code, this)">Code kopieren</button></div>
+      <div class="row"><code id="joinLink"></code><button onclick="copyText(view.links.join, this)">Link kopieren</button></div>
+      <p class="muted" style="margin:0" id="inviteHint"></p>
+    </section>
+    <section class="card stack">
+      <h2 style="margin:0">Links</h2>
+      <div class="stack" style="gap:6px">
+        <span class="muted">OBS-Overlay (Browserquelle, 600 × 220) – nicht öffentlich teilen</span>
+        <div class="row"><button onclick="copyText(view.links.overlay, this)">Overlay-Link kopieren</button><a class="btn" id="overlayOpen" target="_blank">Öffnen</a></div>
+        <span class="muted" id="liveHint"></span>
+        <div class="row" id="liveRow"><button onclick="copyText(view.links.public, this)">Zuschauer-Link kopieren</button><a class="btn" id="liveOpen" target="_blank">Öffnen</a></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="card">
+    <h2>Mitglieder <span id="memberCount" class="muted"></span></h2>
+    <div class="grid" id="members"></div>
+  </section>
+
+  <section class="card">
+    <h2>Jetzt läuft</h2>
+    <div id="now"></div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" onclick="act('skip')">⏭ Nächster Song</button>
+      <button id="openBtn"></button>
+      <button onclick="confirm('Warteschlange wirklich leeren?') && act('clear')">Warteschlange leeren</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Warteschlange <span id="count"></span></h2>
+    <ol class="list" id="queue"></ol>
+  </section>
+
+  <section class="card">
+    <div class="row spread" style="margin-bottom:12px">
+      <h2 style="margin:0">Verlauf <span id="histCount"></span></h2>
+      <button onclick="confirm('Verlauf wirklich löschen?') && act('history-clear')">Verlauf löschen</button>
+    </div>
+    <ol class="list" id="history"></ol>
+  </section>
+
+  <section class="card">
+    <details id="settingsBox">
+      <summary style="font-size:15px">⚙ Einstellungen</summary>
+      <div id="settings" class="stack" style="gap:16px; margin-top:16px"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script src="/common.js"></script>
+<script>
+const CODE = location.pathname.split('/')[2].toUpperCase();
+let view = null;
+let formsKey = '';
+
+async function act(action, body = {}) {
+  try {
+    const res = await api(`/api/r/${CODE}/${action}`, body);
+    if (res.left || res.deleted) return (location.href = '/');
+    render(res);
+    return res;
+  } catch (e) { alert(e.message); }
+}
+
+// --- Spotify-App-Einrichtung -------------------------------------------
+function setupHtml(v) {
+  if (!v.me.isOwner) {
+    return `<h3>⏳ Noch nicht bereit</h3><p class="muted" style="margin:0">Der Raum-Besitzer muss erst seine Spotify-App eintragen. Danach kannst du hier dein Spotify verbinden.</p>`;
+  }
+  return `<h3>Einmalig: deine Spotify-App anlegen</h3>
+    <p class="muted" style="margin:0">Spotify erlaubt Fremd-Apps nur mit eigener Entwickler-App. Pro App dürfen höchstens ${v.maxMembers} Personen mitmachen, genau die Größe eines Raums.</p>
+    ${spotifyAppForm(v)}`;
+}
+
+function spotifyAppForm(v) {
+  const s = v.settings.spotifyApp;
+  return `<ol class="howto">
+      <li>Öffne das <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Spotify-Dashboard</a> und klicke auf <b>Create app</b>. Du brauchst Spotify Premium.</li>
+      <li><b>Redirect URI:</b> <code>${esc(v.redirect.spotify)}</code> <button onclick="copyText(view.redirect.spotify, this)">Kopieren</button> einfügen und auf <b>Add</b> klicken.</li>
+      <li>Bei „Which API/SDKs …“ <b>Web API</b> ankreuzen und auf <b>Save</b> klicken.</li>
+      <li>Unter <b>Settings</b>: <b>Client ID</b> und <b>Client secret</b> kopieren und hier einfügen.</li>
+      <li>Unter <b>User Management</b> jeden Freund aus dem Raum mit Name und <b>E-Mail seines Spotify-Accounts</b> eintragen.</li>
+    </ol>
+    <div class="fields">
+      <label>Client-ID<input id="sp_id" data-sec="spotify" autocomplete="off" value="${esc(s.clientId)}"></label>
+      <label>Client-Secret<input id="sp_secret" data-sec="spotify" type="password" autocomplete="off" placeholder="${s.hasSecret ? 'gespeichert – leer lassen zum Behalten' : ''}"></label>
+    </div>
+    ${saveRow('spotify', 'Prüfen & speichern')}`;
+}
+
+// --- Mitglieder ----------------------------------------------------------
+function renderMembers(v) {
+  $('memberCount').textContent = `(${v.members.length}/${v.maxMembers})`;
+  $('members').innerHTML = v.members.map((m, i) => `
+    <div class="card stack" style="background:#15151a">
+      <div class="row">
+        ${m.image ? `<img class="avatar" src="${esc(m.image)}" alt="">` : ''}
+        <div><b>${esc(m.displayName)}</b> ${m.isOwner ? '<span class="badge">Besitzer</span>' : ''} ${m.isMe ? '<span class="badge">du</span>' : ''}
+          <div class="muted">#${esc(m.login)}</div></div>
+      </div>
+      <div class="row"><span class="dot ${m.useChannel ? 'on' : ''}"></span>
+        <span class="muted">${m.useChannel ? 'Requests aus diesem Kanal' : 'Kanal nicht aktiv'}</span>
+        ${m.isMe ? `<button onclick="act('channel', { use: ${!m.useChannel} })">${m.useChannel ? 'Deaktivieren' : 'Aktivieren'}</button>` : ''}</div>
+      <div class="row"><span class="dot ${m.spotify.connected ? 'on' : ''}"></span>
+        <span class="muted">${m.spotify.connected ? `Spotify: ${esc(m.spotify.displayName)} (${esc(m.spotify.product || '?')})` : 'Spotify nicht verbunden'}
+        ${m.spotify.connected && v.members.filter((x) => x.spotify.connected)[0]?.id === m.id ? ' · Taktgeber' : ''}</span></div>
+      ${m.spotify.error ? `<p class="err" style="margin:0">${esc(m.spotify.error)}</p>` : ''}
+      <div class="row">
+        ${m.isMe && v.spotifyReady ? (m.spotify.connected
+          ? `<button onclick="confirm('Spotify trennen?') && act('spotify-disconnect')">Spotify trennen</button>`
+          : `<a class="btn primary" href="/auth/spotify/${CODE}">Spotify verbinden</a>`) : ''}
+        ${v.me.isOwner && !m.isOwner ? `<button class="danger" onclick="confirm('${esc(m.displayName)} aus dem Raum entfernen?') && act('kick', { memberId: '${esc(m.id)}' })">Entfernen</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+// --- Jetzt läuft / Warteschlange / Verlauf -------------------------------
+function renderNow(v) {
+  const c = v.current, p = v.playback;
+  const ours = c && p && p.uri === c.uri;
+  if (c) {
+    $('now').innerHTML = `<div class="now">${c.image ? `<img src="${esc(c.image)}" alt="">` : ''}<div style="flex:1">
+      <div class="title">${esc(c.name)}</div><div>${esc(c.artists)}</div>
+      <div class="muted">gewünscht von ${esc(c.user)} in #${esc(c.channel)}${ours ? ` · ${time(p.progressMs)} / ${time(p.durationMs)}` : ''}</div>
+      ${ours ? `<div class="bar"><div style="width:${(p.progressMs / p.durationMs) * 100}%"></div></div>` : ''}</div></div>`;
+  } else if (p) {
+    $('now').innerHTML = `<div class="title">${esc(p.name)}</div><div>${esc(p.artists)}</div>
+      <div class="muted">kein Request · ${p.isPlaying ? 'läuft' : 'pausiert'}${p.device ? ' auf ' + esc(p.device) : ''}</div>`;
+  } else {
+    $('now').innerHTML = '<p class="muted">Gerade läuft nichts. Der Taktgeber muss Spotify offen haben.</p>';
+  }
+  $('openBtn').textContent = v.open ? '🔓 Requests offen' : '🔒 Requests geschlossen';
+  $('openBtn').onclick = () => act('open', { open: !v.open });
+}
+
+function blockBtn(e) {
+  const name = (e.login || e.user || '').toLowerCase();
+  if (!name) return '';
+  return view.blacklist.includes(name)
+    ? `<button title="${esc(name)} entsperren" onclick="act('blacklist', { user:'${esc(name)}', add:false })">✅</button>`
+    : `<button title="${esc(name)} sperren" onclick="confirm('${esc(name)} für Requests sperren?') && act('blacklist', { user:'${esc(name)}', add:true })">🚫</button>`;
+}
+
+function renderQueue(v) {
+  const q = v.queue, queued = v.queued;
+  const total = q.length + (queued ? 1 : 0);
+  $('count').textContent = total ? `(${total})` : '';
+  const first = queued ? `<li>${queued.image ? `<img src="${esc(queued.image)}" alt="">` : ''}
+    <div class="info"><div><b>Als Nächstes: ${esc(queued.name)}</b> – ${esc(queued.artists)}</div>
+    <div class="muted">${esc(queued.user)} · #${esc(queued.channel)} · schon in der Spotify-Warteschlange</div></div></li>` : '';
+  const off = queued ? 1 : 0;
+  $('queue').innerHTML = !total ? '<p class="muted">Leer. Zuschauer wünschen sich Songs mit <b>!sr Songname</b>, einem Spotify- oder YouTube-Link.</p>'
+    : first + q.map((e, i) => `<li>${e.image ? `<img src="${esc(e.image)}" alt="">` : ''}
+      <div class="info"><div><b>${i + 1 + off}. ${esc(e.name)}</b> – ${esc(e.artists)}</div>
+      <div class="muted">${esc(e.user)} · #${esc(e.channel)} · ${time(e.durationMs)}</div></div>
+      <button title="hoch" onclick="act('move', { id:'${e.id}', dir:-1 })">▲</button>
+      <button title="runter" onclick="act('move', { id:'${e.id}', dir:1 })">▼</button>
+      ${blockBtn(e)}
+      <button title="entfernen" onclick="act('remove', { id:'${e.id}' })">✕</button></li>`).join('');
+}
+
+function renderHistory(h) {
+  $('histCount').textContent = h.length ? `(${h.length})` : '';
+  const when = (t) => new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  $('history').innerHTML = h.length ? h.map((e) => `<li>${e.image ? `<img src="${esc(e.image)}" alt="">` : ''}
+      <div class="info"><div><b>${esc(e.name)}</b> – ${esc(e.artists)}</div>
+      <div class="muted">${when(e.playedAt)} · gewünscht von <b>${esc(e.user)}</b> · #${esc(e.channel)}</div></div>
+      ${e.url ? `<a class="btn" title="In Spotify öffnen" href="${esc(e.url)}" target="_blank" rel="noopener">↗</a>` : ''}
+      <button title="Nochmal in die Warteschlange" onclick="act('requeue', { id:'${e.id}' })">↻</button>
+      ${blockBtn(e)}</li>`).join('') : '<p class="muted">Noch keine Requests gespielt.</p>';
+}
+
+// --- Einstellungen ---------------------------------------------------------
+function saveRow(sec, label = 'Speichern') {
+  return `<div class="row"><button class="primary" onclick="saveSec('${sec}')">${label}</button><span class="err" id="err_${sec}"></span></div>`;
+}
+
+function settingsHtml(v) {
+  const st = v.settings, r = st.requests, ch = st.chat;
+  return `
+  <div class="stack"><h3>Regeln</h3>
+    <div class="fields">
+      <label>Max. Songs pro Zuschauer<input id="r_user" data-sec="rules" type="number" min="1" value="${r.maxPerUser}"></label>
+      <label>Max. Länge der Warteschlange<input id="r_len" data-sec="rules" type="number" min="1" value="${r.maxQueueLength}"></label>
+      <label>Max. Songdauer (Minuten)<input id="r_dur" data-sec="rules" type="number" min="1" value="${r.maxDurationMinutes}"></label>
+      <label>Verlauf: so viele Songs merken<input id="r_hist" data-sec="rules" type="number" min="1" value="${r.historySize}"></label>
+    </div>
+    <label class="check"><input type="checkbox" id="r_bypass" ${r.modsBypassClosed ? 'checked' : ''}> Mods dürfen auch wünschen, wenn Requests geschlossen sind</label>
+    <label class="check"><input type="checkbox" id="r_public" ${st.publicPage ? 'checked' : ''}> Öffentliche Zuschauer-Seite mit Warteschlange</label>
+    ${saveRow('rules')}</div>
+
+  <div class="stack"><h3>Chat-Nachrichten</h3>
+    <label class="check"><input type="checkbox" id="c_enabled" ${ch.enabled ? 'checked' : ''}> Bot darf im Chat schreiben (aus = Requests still annehmen)</label>
+    <label>„Jetzt läuft“-Ansage
+      <select id="r_ann">
+        <option value="first" ${r.announce === 'first' ? 'selected' : ''}>nur im Kanal des Besitzers (ideal mit Shared Chat)</option>
+        <option value="all" ${r.announce === 'all' ? 'selected' : ''}>in allen Kanälen</option>
+        <option value="off" ${r.announce === 'off' ? 'selected' : ''}>gar nicht</option>
+      </select></label>
+    <p class="muted" style="margin:0">Platzhalter: <code>{user}</code> <code>{song}</code> <code>{title}</code> <code>{artist}</code> <code>{pos}</code> <code>{requester}</code> <code>{max}</code> <code>{query}</code> <code>{url}</code> <code>{list}</code> <code>{target}</code>. <b>Leeres Feld = Nachricht wird nicht gesendet.</b></p>
+    <details><summary>Alle Nachrichten bearbeiten (${ch.messages.length})</summary>
+      <div class="stack" style="margin-top:10px">
+      ${ch.messages.map((m) => `<div class="stack" style="gap:4px"><span class="muted">${esc(m.label)}</span>
+        <div class="row"><input id="m_${m.key}" data-sec="chat" value="${esc(m.text)}" placeholder="(wird nicht gesendet)">
+          <button title="Standard" onclick="$('m_${m.key}').value = ${esc(JSON.stringify(m.default))}">↺</button></div></div>`).join('')}
+      </div></details>
+    ${saveRow('chat')}</div>
+
+  <div class="stack"><h3>Gesperrte Zuschauer</h3>
+    <p class="muted" style="margin:0">Auch mit 🚫 in Warteschlange/Verlauf oder per Chat: <code>!srblock name</code> / <code>!srunblock name</code> (Mods).</p>
+    <div class="row">${st.blacklist.length ? st.blacklist.map((n) => `<span class="tag">${esc(n)}<button onclick="act('blacklist', { user:'${esc(n)}', add:false })">✕</button></span>`).join('') : '<span class="muted">Niemand gesperrt.</span>'}</div>
+    <div class="row"><input id="bl_add" data-sec="blacklist" placeholder="Twitch-Name">
+      <button onclick="if ($('bl_add').value.trim()) { act('blacklist', { user: $('bl_add').value, add:true }); $('bl_add').value = ''; }">Sperren</button></div></div>
+
+  ${v.me.isOwner && v.spotifyReady ? `<div class="stack"><h3>Spotify-App</h3>
+    <p class="muted" style="margin:0">Achtung: Eine andere Client-ID trennt alle Spotify-Logins im Raum.</p>
+    ${spotifyAppForm(v)}</div>` : ''}
+
+  <div class="stack"><h3>Raum verlassen</h3>
+    <div class="row">
+      ${v.me.isOwner
+        ? `<button onclick="confirm('Neuen Overlay-Link erzeugen? Der alte funktioniert dann nicht mehr.') && act('overlay-reset')">Overlay-Link erneuern</button>
+           <button class="danger" onclick="confirm('Raum ${esc(v.code)} endgültig löschen? Warteschlange, Verlauf und Logins gehen verloren.') && act('delete')">Raum löschen</button>`
+        : `<button class="danger" onclick="confirm('Raum verlassen?') && act('leave')">Raum verlassen</button>`}
+    </div></div>`;
+}
+
+function renderForms(v) {
+  const host = v.spotifyReady ? $('settings') : $('setup');
+  const key = JSON.stringify([v.spotifyReady, v.me, v.settings]);
+  const active = document.activeElement;
+  if (key === formsKey && host.childElementCount) return;
+  if ((host.contains(active) || $('settings').contains(active)) && active.tagName !== 'BUTTON') return;
+  formsKey = key;
+  const drafts = {};
+  document.querySelectorAll('[data-sec]').forEach((el) => { if (el.value && el.type !== 'checkbox') drafts[el.id] = el.value; });
+  $('setup').classList.toggle('hidden', v.spotifyReady);
+  $('setup').innerHTML = v.spotifyReady ? '' : setupHtml(v);
+  $('settings').innerHTML = settingsHtml(v);
+  for (const [id, val] of Object.entries(drafts)) if ($(id) && !saved.has($(id).dataset.sec)) $(id).value = val;
+  for (const sec of saved) if ($('err_' + sec)) { $('err_' + sec).textContent = 'Gespeichert ✓'; $('err_' + sec).className = 'ok'; }
+  saved.clear();
+}
+
+const saved = new Set();
+async function saveSec(sec) {
+  const v = (id) => $(id).value;
+  const body = {
+    spotify: () => ({ spotifyApp: { clientId: v('sp_id'), clientSecret: v('sp_secret') } }),
+    rules: () => ({ requests: { maxPerUser: v('r_user'), maxQueueLength: v('r_len'), maxDurationMinutes: v('r_dur'), historySize: v('r_hist'), modsBypassClosed: $('r_bypass').checked }, publicPage: $('r_public').checked }),
+    chat: () => ({ chat: { enabled: $('c_enabled').checked, texts: Object.fromEntries([...document.querySelectorAll('[id^="m_"]')].map((el) => [el.id.slice(2), el.value])) }, requests: { announce: v('r_ann') } }),
+  }[sec]();
+  const err = $('err_' + sec);
+  err.className = 'muted';
+  err.textContent = 'Prüfe …';
+  try {
+    const res = await api(`/api/r/${CODE}/settings`, body);
+    saved.add(sec);
+    formsKey = '';
+    render(res);
+  } catch (e) { err.className = 'err'; err.textContent = e.message; }
+}
+
+// --- Alles zeichnen --------------------------------------------------------
+function render(v) {
+  view = v;
+  $('code').textContent = v.code;
+  $('inviteCode').textContent = v.code;
+  $('joinLink').textContent = v.links.join;
+  $('inviteHint').textContent = v.me.isOwner
+    ? `Bis zu ${v.maxMembers} Personen. Trag jeden Freund vorher in deiner Spotify-App unter „User Management“ ein, sonst lehnt Spotify ihn ab.`
+    : `Bis zu ${v.maxMembers} Personen. Neue Mitglieder muss ${v.members.find((m) => m.isOwner)?.displayName} in seiner Spotify-App freischalten.`;
+  $('overlayOpen').href = v.links.overlay;
+  $('liveOpen').href = v.links.public;
+  $('liveRow').classList.toggle('hidden', !v.settings.publicPage);
+  $('liveHint').textContent = v.settings.publicPage ? 'Zuschauer-Seite: zeigt Warteschlange und aktuellen Song, darf öffentlich geteilt werden' : 'Zuschauer-Seite ist ausgeschaltet (Einstellungen → Regeln)';
+  $('botStatus').innerHTML = `<span class="dot ${v.bot.connected ? 'on' : ''}"></span> Bot ${v.bot.connected ? esc(v.bot.login) + ' im Chat' : 'offline'}`;
+  renderForms(v);
+  renderMembers(v);
+  renderNow(v);
+  renderQueue(v);
+  renderHistory(v.history);
+  $('log').textContent = v.log.slice().reverse().join('\n');
+}
+
+async function refresh() {
+  try {
+    render(await api(`/api/r/${CODE}`));
+    $('fatal').classList.add('hidden');
+  } catch (e) {
+    $('fatal').textContent = e.message;
+    $('fatal').classList.remove('hidden');
+  }
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

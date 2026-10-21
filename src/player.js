@@ -144,7 +144,11 @@ export class Player extends EventEmitter {
   }
 
   start() {
-    setInterval(() => this.tick(), 2000);
+    this.interval = setInterval(() => this.tick(), 2000);
+  }
+
+  stop() {
+    clearInterval(this.interval);
   }
 
   async tick() {

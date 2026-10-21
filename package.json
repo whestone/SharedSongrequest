@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Gemeinsame Songrequest-Warteschlange für mehrere Twitch-Kanäle, abgespielt auf mehreren Spotify-Accounts gleichzeitig",
   "type": "module",
-  "main": "src/index.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/server.js"
   },
   "engines": {
     "node": ">=18"

@@ -1,21 +1,19 @@
 # Shared Songrequest
 
-Eine gemeinsame Songrequest-Warteschlange für mehrere Twitch-Kanäle. Jeder Request wird gleichzeitig auf mehreren Spotify-Accounts abgespielt.
+Gemeinsame Songrequests für Twitch-Streamer, die zusammen streamen. Jeder Raum hat einen Code und eine eigene URL. Zuschauer aus allen Kanälen des Raums wünschen mit `!sr`, und jeder Song läuft gleichzeitig auf allen Spotify-Accounts im Raum.
 
-- `!sr` mit Songnamen, Spotify-Link oder YouTube-Link (wird auf Spotify umgewandelt)
-- Weboberfläche mit Warteschlange, Verlauf, Sperrliste und Einstellungen
-- Einstellbare Chat-Nachrichten, Stumm-Modus
-- OBS-Overlay
+- Räume mit Code, Einladungslink und eigener URL, Login mit Twitch
+- `!sr` mit Songnamen, Spotify- oder YouTube-Link (YouTube wird auf Spotify umgewandelt)
+- Warteschlange, Verlauf, Sperrliste, einstellbare Chat-Nachrichten, Stumm-Modus
+- OBS-Overlay und öffentliche Zuschauer-Seite pro Raum
+- Ein gemeinsamer Bot für alle Räume, Daten verschlüsselt gespeichert
 - Keine Abhängigkeiten außer Node.js ≥ 18
 
-## Start
+**Für Streamer:** [ANLEITUNG.md](ANLEITUNG.md) · **Server einrichten:** [DEPLOY.md](DEPLOY.md)
+
+## Schnellstart lokal
 
 ```bash
+cp .env.example .env   # ausfüllen, PUBLIC_URL=http://localhost:8888
 npm start
 ```
-
-Oder unter Windows `start.bat` doppelklicken. Danach http://127.0.0.1:8888 öffnen. Der Einrichtungs-Assistent führt durch Twitch- und Spotify-App.
-
-Die ausführliche Anleitung steht in [ANLEITUNG.md](ANLEITUNG.md).
-
-Logins und Einstellungen liegen in `data/state.json`. Der Ordner ist per `.gitignore` ausgeschlossen, weil er Tokens und Client-Secrets enthält.

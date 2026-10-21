@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin – Shared Songrequest</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <div class="row spread"><div class="row"><a class="btn" href="/">←</a><h1>Admin</h1></div></div>
+  <div id="denied" class="card hidden">Nur für Admins (ADMIN_TWITCH_LOGINS in .env). <a href="/auth/twitch?next=/admin">Mit Twitch anmelden</a></div>
+  <section class="card stack hidden" id="botBox">
+    <h2 style="margin:0">Bot-Account</h2>
+    <div id="bot"></div>
+    <p class="muted" style="margin:0">Melde dich mit dem Twitch-Account an, der im Chat schreiben soll (z. B. ein eigener Bot-Account). Am besten in einem privaten Fenster, wenn du sonst mit deinem Hauptaccount eingeloggt bist.</p>
+    <div><a class="btn primary" href="/auth/bot">Bot-Account verbinden</a></div>
+    <p class="muted" style="margin:0">Redirect-URLs zum Eintragen: Twitch <code id="twr"></code> · Spotify (pro Raum-Besitzer) <code id="spr"></code></p>
+  </section>
+  <section class="card hidden" id="roomsBox">
+    <h2>Räume</h2>
+    <ol class="list" id="rooms"></ol>
+  </section>
+</main>
+<script src="/common.js"></script>
+<script>
+async function refresh() {
+  const res = await fetch('/api/admin');
+  if (!res.ok) { $('denied').classList.remove('hidden'); return; }
+  const s = await res.json();
+  ['botBox', 'roomsBox'].forEach((id) => $(id).classList.remove('hidden'));
+  $('bot').innerHTML = s.bot.linked
+    ? `<span class="dot ${s.bot.connected ? 'on' : ''}"></span> <b>${esc(s.bot.login || '')}</b> ${s.bot.connected ? 'verbunden' : 'verbindet …'} · ${s.bot.channels} Kanäle`
+    : '<span class="dot"></span> Noch kein Bot-Account verbunden';
+  $('twr').textContent = s.twitchRedirect;
+  $('spr').textContent = s.spotifyRedirect;
+  $('rooms').innerHTML = s.rooms.length ? s.rooms.map((r) => `<li><div class="info"><div><b>${esc(r.code)}</b> · ${esc(r.owner || '?')} · ${r.members} Mitglieder · ${r.queue} in der Warteschlange</div>
+    <div class="muted">${r.channels.map((c) => '#' + esc(c)).join(' ') || 'keine Kanäle'}</div></div></li>`).join('') : '<p class="muted">Noch keine Räume.</p>';
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

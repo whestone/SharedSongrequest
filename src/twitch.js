@@ -4,11 +4,47 @@ import { EventEmitter } from 'node:events';
 const SCOPES = 'chat:read chat:edit';
 
 export class TwitchAuth {
-  // getCreds() liefert { clientId, clientSecret } aus den gespeicherten Einstellungen
-  constructor(getCreds, redirectUri, store) {
+  // getCreds() liefert { clientId, clientSecret }; die Bot-Tokens liegen in store.data[key]
+  constructor(getCreds, redirectUri, store, key = 'twitch') {
     this.getCreds = getCreds;
     this.redirectUri = redirectUri;
     this.store = store;
+    this.key = key;
+  }
+
+  // Login-Link für normale Nutzer (nur zur Identifizierung, keine Rechte)
+  userLoginUrl(state) {
+    const q = new URLSearchParams({
+      response_type: 'code',
+      client_id: this.getCreds().clientId,
+      redirect_uri: this.redirectUri,
+      state,
+    });
+    return `https://id.twitch.tv/oauth2/authorize?${q}`;
+  }
+
+  // Code aus dem Nutzer-Login einlösen und herausfinden, wer das ist.
+  async identify(code) {
+    const { clientId, clientSecret } = this.getCreds();
+    const res = await fetch('https://id.twitch.tv/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, code, grant_type: 'authorization_code', redirect_uri: this.redirectUri }),
+    });
+    const tok = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(`Twitch-Login fehlgeschlagen: ${tok.message || res.status}`);
+    const users = await fetch('https://api.twitch.tv/helix/users', {
+      headers: { Authorization: `Bearer ${tok.access_token}`, 'Client-Id': clientId },
+    }).then((r) => r.json());
+    const u = users.data?.[0];
+    if (!u) throw new Error('Twitch-Login fehlgeschlagen: Nutzer nicht gefunden');
+    // Token wird nicht gebraucht, gleich wieder ungültig machen
+    fetch('https://id.twitch.tv/oauth2/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id: clientId, token: tok.access_token }),
+    }).catch(() => {});
+    return { id: u.id, login: u.login, displayName: u.display_name, image: u.profile_image_url };
   }
 
   // Prüft Client-ID und Secret, ohne dass sich jemand anmelden muss.
@@ -28,7 +64,7 @@ export class TwitchAuth {
   }
 
   get saved() {
-    return this.store.data.twitch;
+    return this.store.data[this.key];
   }
 
   authorizeUrl(state) {
@@ -51,7 +87,7 @@ export class TwitchAuth {
     });
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(`Twitch-Login fehlgeschlagen: ${json.message || res.status}`);
-    this.store.data.twitch = {
+    this.store.data[this.key] = {
       ...this.saved,
       accessToken: json.access_token,
       refreshToken: json.refresh_token,
@@ -97,13 +133,35 @@ export class TwitchChat extends EventEmitter {
     this.connected = false;
     this.seen = new Map();
     this.stopped = true;
+    this.joined = new Set();
+    this.outbox = [];
+    this.sent = [];
+    this.channels = [];
     this.setChannels(channels);
   }
 
   setChannels(channels) {
-    this.channels = channels.map((c) => c.trim().toLowerCase().replace(/^#/, '')).filter(Boolean);
-    // Läuft der Bot schon, mit den neuen Kanälen neu verbinden
-    if (!this.stopped) this.start();
+    this.channels = [...new Set(channels.map((c) => c.trim().toLowerCase().replace(/^#/, '')).filter(Boolean))];
+    if (this.connected) this.syncJoins();
+  }
+
+  // Nur die Unterschiede beitreten/verlassen, statt neu zu verbinden.
+  // Twitch erlaubt ca. 20 JOINs pro 10 s, darum in Paketen.
+  syncJoins() {
+    const want = new Set(this.channels);
+    const part = [...this.joined].filter((c) => !want.has(c));
+    const join = this.channels.filter((c) => !this.joined.has(c));
+    if (part.length) this.raw(`PART ${part.map((c) => '#' + c).join(',')}`);
+    part.forEach((c) => this.joined.delete(c));
+    clearTimeout(this.joinTimer);
+    const next = () => {
+      const batch = join.splice(0, 15);
+      if (!batch.length || !this.connected) return;
+      this.raw(`JOIN ${batch.map((c) => '#' + c).join(',')}`);
+      batch.forEach((c) => this.joined.add(c));
+      if (join.length) this.joinTimer = setTimeout(next, 11_000);
+    };
+    next();
   }
 
   async start() {
@@ -113,7 +171,7 @@ export class TwitchChat extends EventEmitter {
     this.socket = null;
     old?.destroy();
     this.connected = false;
-    if (!this.channels.length) return this.log('Twitch: keine Kanäle eingetragen');
+    this.joined.clear();
     const gen = (this.gen = (this.gen || 0) + 1);
     let creds;
     try {
@@ -133,7 +191,6 @@ export class TwitchChat extends EventEmitter {
       this.raw('CAP REQ :twitch.tv/tags twitch.tv/commands');
       this.raw(`PASS oauth:${creds.token}`);
       this.raw(`NICK ${creds.login}`);
-      this.raw(`JOIN ${this.channels.map((c) => '#' + c).join(',')}`);
     });
     this.lastData = Date.now();
     clearInterval(this.watchdog);
@@ -170,7 +227,9 @@ export class TwitchChat extends EventEmitter {
   stop() {
     this.stopped = true;
     clearTimeout(this.retryTimer);
+    clearTimeout(this.joinTimer);
     clearInterval(this.watchdog);
+    this.joined.clear();
     const old = this.socket;
     this.socket = null;
     old?.destroy();
@@ -181,8 +240,27 @@ export class TwitchChat extends EventEmitter {
     this.socket?.write(line + '\r\n');
   }
 
+  // Nachrichten gedrosselt senden: Twitch erlaubt ohne Mod-Status ca. 20 pro 30 s.
   say(channel, text) {
-    if (this.connected) this.raw(`PRIVMSG #${channel} :${text.replace(/[\r\n]/g, ' ').slice(0, 480)}`);
+    if (!this.connected || this.outbox.length > 50) return;
+    this.outbox.push(`PRIVMSG #${channel} :${text.replace(/[\r\n]/g, ' ').slice(0, 480)}`);
+    this.drain();
+  }
+
+  drain() {
+    if (this.drainTimer) return;
+    const now = Date.now();
+    this.sent = this.sent.filter((t) => now - t < 30_000);
+    while (this.outbox.length && this.sent.length < 18) {
+      this.raw(this.outbox.shift());
+      this.sent.push(now);
+    }
+    if (this.outbox.length) {
+      this.drainTimer = setTimeout(() => {
+        this.drainTimer = null;
+        this.drain();
+      }, 30_000 - (now - this.sent[0]) + 50);
+    }
   }
 
   handle(msg) {
@@ -195,7 +273,8 @@ export class TwitchChat extends EventEmitter {
         break;
       case '001':
         this.connected = true;
-        this.log(`Twitch verbunden als ${this.login}, Kanäle: ${this.channels.join(', ')}`);
+        this.log(`Twitch verbunden als ${this.login}, ${this.channels.length} Kanäle`);
+        this.syncJoins();
         this.emit('status');
         break;
       case 'NOTICE':
@@ -207,6 +286,10 @@ export class TwitchChat extends EventEmitter {
         }
         break;
       case 'PRIVMSG': {
+        // Shared Chat: Spiegelungen aus anderen Kanälen ignorieren. Jede Nachricht zählt
+        // nur in dem Kanal, in dem sie geschrieben wurde (falls der Bot dort ist).
+        const src = msg.tags['source-room-id'];
+        if (src && msg.tags['room-id'] && src !== msg.tags['room-id']) return;
         const key = msg.tags['source-id'] || msg.tags.id;
         if (key) {
           if (this.seen.has(key)) return;

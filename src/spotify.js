@@ -55,20 +55,29 @@ export class SpotifyAuth {
   }
 }
 
+// Ein Spotify-Login eines Raum-Mitglieds. Die Tokens liegen in member.spotify,
+// save() speichert den Raum.
 export class SpotifyAccount {
-  constructor({ slot, name, auth, store }) {
-    this.slot = slot;
-    this.name = name;
+  constructor({ member, auth, save }) {
+    this.member = member;
     this.auth = auth;
-    this.store = store;
+    this.saveRoom = save;
     this.error =
       this.saved && this.saved.scopes !== SCOPES
         ? 'Bitte einmal trennen und neu verbinden, der Bot braucht eine zusätzliche Berechtigung'
         : null;
   }
 
+  get id() {
+    return this.member.id;
+  }
+
+  get name() {
+    return this.member.displayName;
+  }
+
   get saved() {
-    return this.store.data.spotify?.[this.slot];
+    return this.member.spotify;
   }
 
   get connected() {
@@ -77,32 +86,31 @@ export class SpotifyAccount {
 
   saveTokens(t) {
     const prev = this.saved || {};
-    this.store.data.spotify ||= {};
-    this.store.data.spotify[this.slot] = {
+    this.member.spotify = {
       ...prev,
       accessToken: t.access_token,
       refreshToken: t.refresh_token || prev.refreshToken,
       expiresAt: Date.now() + t.expires_in * 1000,
     };
-    this.store.save();
+    this.saveRoom();
   }
 
   async connectWithCode(code) {
     this.saveTokens(await this.auth.exchange(code));
     const me = await this.api('GET', '/me');
-    Object.assign(this.store.data.spotify[this.slot], {
+    Object.assign(this.member.spotify, {
       displayName: me.display_name || me.id,
       product: me.product,
       country: me.country,
       scopes: SCOPES,
     });
-    this.store.save();
+    this.saveRoom();
     this.error = me.product && me.product !== 'premium' ? 'Kein Premium – Wiedergabe steuern geht nur mit Premium' : null;
   }
 
   disconnect() {
-    if (this.store.data.spotify) delete this.store.data.spotify[this.slot];
-    this.store.save();
+    delete this.member.spotify;
+    this.saveRoom();
     this.error = null;
   }
 

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared Songrequest</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main>
+  <div class="row spread">
+    <h1>🎵 Shared Songrequest</h1>
+    <div id="who" class="row"></div>
+  </div>
+
+  <section class="card stack" id="intro">
+    <p style="margin:0">Streamt zusammen und teilt euch <b>eine</b> Songrequest-Warteschlange: Zuschauer aus allen Kanälen wünschen mit <code>!sr</code>, und jeder Song läuft gleichzeitig auf allen Spotify-Accounts im Raum.</p>
+    <ol class="howto">
+      <li>Mit Twitch anmelden und einen <b>Raum</b> erstellen.</li>
+      <li>Einmal eine eigene Spotify-App anlegen (der Assistent zeigt, wie).</li>
+      <li>Freunden den <b>Raumcode</b> schicken. Sie treten bei und verbinden ihr Spotify.</li>
+    </ol>
+  </section>
+
+  <section class="card stack hidden" id="loggedOut">
+    <a class="btn primary" id="loginBtn" href="/auth/twitch">Mit Twitch anmelden</a>
+    <p class="muted" style="margin:0">Wir sehen nur deinen Twitch-Namen. Der Bot bekommt keine Rechte an deinem Account.</p>
+  </section>
+
+  <div id="loggedIn" class="hidden stack" style="gap:16px">
+    <section class="card stack" id="joinBox">
+      <h2 style="margin:0">Raum beitreten</h2>
+      <div class="row">
+        <input id="joinCode" placeholder="Raumcode, z. B. K7X2QM" maxlength="10" style="text-transform:uppercase">
+        <button class="primary" onclick="join()">Beitreten</button>
+      </div>
+      <span class="err" id="joinErr"></span>
+    </section>
+
+    <section class="card stack">
+      <div class="row spread">
+        <h2 style="margin:0">Deine Räume</h2>
+        <button onclick="createRoom()">+ Neuen Raum erstellen</button>
+      </div>
+      <span class="err" id="createErr"></span>
+      <ol class="list" id="rooms"></ol>
+    </section>
+  </div>
+</main>
+
+<script src="/common.js"></script>
+<script>
+const joinParam = new URLSearchParams(location.search).get('join');
+
+async function load() {
+  const me = await api('/api/me');
+  if (!me.user) {
+    $('loggedOut').classList.remove('hidden');
+    $('loginBtn').href = '/auth/twitch?next=' + encodeURIComponent(location.pathname + location.search);
+    return;
+  }
+  $('loggedIn').classList.remove('hidden');
+  $('who').innerHTML = `${me.user.image ? `<img class="avatar" src="${esc(me.user.image)}" alt="">` : ''}
+    <b>${esc(me.user.displayName)}</b>
+    ${me.isAdmin ? '<a class="btn" href="/admin">Admin</a>' : ''}
+    <button onclick="logout()">Abmelden</button>`;
+  $('rooms').innerHTML = me.rooms.length ? me.rooms.map((r) => `
+    <li><div class="info"><div><b class="code-big" style="font-size:18px">${esc(r.code)}</b> ${r.isOwner ? '<span class="badge">Besitzer</span>' : ''}</div>
+      <div class="muted">${r.members.map(esc).join(', ')}</div></div>
+      <a class="btn primary" href="/r/${esc(r.code)}">Öffnen</a></li>`).join('')
+    : '<p class="muted">Du bist noch in keinem Raum. Erstelle einen oder tritt mit einem Code bei.</p>';
+  if (joinParam) {
+    $('joinCode').value = joinParam;
+    $('joinBox').style.borderColor = 'var(--accent)';
+    if (me.rooms.some((r) => r.code === joinParam.toUpperCase())) location.href = '/r/' + joinParam.toUpperCase();
+  }
+}
+
+async function join() {
+  $('joinErr').textContent = '';
+  try {
+    const { code } = await api('/api/join', { code: $('joinCode').value.trim().toUpperCase() });
+    location.href = '/r/' + code;
+  } catch (e) { $('joinErr').textContent = e.message; }
+}
+
+async function createRoom() {
+  $('createErr').textContent = '';
+  try {
+    const { code } = await api('/api/rooms', {});
+    location.href = '/r/' + code;
+  } catch (e) { $('createErr').textContent = e.message; }
+}
+
+$('joinCode').addEventListener('keydown', (e) => e.key === 'Enter' && join());
+load();
+</script>
+</body>
+</html>
