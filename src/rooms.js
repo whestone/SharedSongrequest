@@ -93,8 +93,11 @@ export class Room {
     const norm = (n) => String(n).trim().replace(/^@/, '').toLowerCase();
     return {
       has: (name) => !!name && d.blacklist.includes(norm(name)),
+      // Nur gültige Twitch-Namen (a–z, 0–9, _), alles andere wird abgelehnt
       add: (name) => {
-        if (norm(name) && !d.blacklist.includes(norm(name))) d.blacklist.push(norm(name));
+        const n = norm(name);
+        if (!/^[a-z0-9_]{1,25}$/.test(n)) throw new Error('Das ist kein gültiger Twitch-Name.');
+        if (!d.blacklist.includes(n)) d.blacklist.push(n);
         this.save();
       },
       remove: (name) => {

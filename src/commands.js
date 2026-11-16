@@ -7,7 +7,11 @@ export function createCommands({ player, accounts, settings, blacklist }) {
   const fmt = (t) => `${t.name} – ${t.artists}`;
   const upcoming = () => [player.queued, ...player.queue].filter(Boolean);
   const mine = (userId) => [player.current, ...upcoming()].filter((e) => e && e.userId === userId);
-  const targetName = (args) => args.trim().replace(/^@/, '').toLowerCase();
+  // Erstes Wort als Twitch-Name; ungültige Namen ergeben '' und werden ignoriert
+  const targetName = (args) => {
+    const n = (args.trim().split(/\s+/)[0] || '').replace(/^@/, '').toLowerCase();
+    return /^[a-z0-9_]{1,25}$/.test(n) ? n : '';
+  };
 
   return {
     async sr(msg, args, say) {

@@ -20,7 +20,7 @@
 <div class="box" id="box"></div>
 <script>
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
-const code = location.pathname.split('/')[2];
+const code = window.SR_CODE || location.pathname.split('/')[2];
 const key = new URLSearchParams(location.search).get('k') || '';
 async function refresh() {
   try {

@@ -22,7 +22,7 @@
 </main>
 <script src="/common.js"></script>
 <script>
-const CODE = location.pathname.split('/')[2];
+const CODE = pageCode();
 async function refresh() {
   const res = await fetch(`/api/live/${CODE}`);
   if (!res.ok) { $('missing').classList.remove('hidden'); return; }

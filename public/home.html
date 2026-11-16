@@ -56,23 +56,23 @@ async function load() {
   const me = await api('/api/me');
   if (!me.user) {
     $('loggedOut').classList.remove('hidden');
-    $('loginBtn').href = '/auth/twitch?next=' + encodeURIComponent(location.pathname + location.search);
+    $('loginBtn').href = ROUTES.login(location.pathname + location.search);
     return;
   }
   $('loggedIn').classList.remove('hidden');
   $('who').innerHTML = `${me.user.image ? `<img class="avatar" src="${esc(me.user.image)}" alt="">` : ''}
     <b>${esc(me.user.displayName)}</b>
-    ${me.isAdmin ? '<a class="btn" href="/admin">Admin</a>' : ''}
+    ${me.isAdmin ? `<a class="btn" href="${ROUTES.admin}">Admin</a>` : ''}
     <button onclick="logout()">Abmelden</button>`;
   $('rooms').innerHTML = me.rooms.length ? me.rooms.map((r) => `
     <li><div class="info"><div><b class="code-big" style="font-size:18px">${esc(r.code)}</b> ${r.isOwner ? '<span class="badge">Besitzer</span>' : ''}</div>
       <div class="muted">${r.members.map(esc).join(', ')}</div></div>
-      <a class="btn primary" href="/r/${esc(r.code)}">Öffnen</a></li>`).join('')
+      <a class="btn primary" href="${ROUTES.room(esc(r.code))}">Öffnen</a></li>`).join('')
     : '<p class="muted">Du bist noch in keinem Raum. Erstelle einen oder tritt mit einem Code bei.</p>';
   if (joinParam) {
     $('joinCode').value = joinParam;
     $('joinBox').style.borderColor = 'var(--accent)';
-    if (me.rooms.some((r) => r.code === joinParam.toUpperCase())) location.href = '/r/' + joinParam.toUpperCase();
+    if (me.rooms.some((r) => r.code === joinParam.toUpperCase())) location.href = ROUTES.room(joinParam.toUpperCase());
   }
 }
 
@@ -80,7 +80,7 @@ async function join() {
   $('joinErr').textContent = '';
   try {
     const { code } = await api('/api/join', { code: $('joinCode').value.trim().toUpperCase() });
-    location.href = '/r/' + code;
+    location.href = ROUTES.room(code);
   } catch (e) { $('joinErr').textContent = e.message; }
 }
 
@@ -88,7 +88,7 @@ async function createRoom() {
   $('createErr').textContent = '';
   try {
     const { code } = await api('/api/rooms', {});
-    location.href = '/r/' + code;
+    location.href = ROUTES.room(code);
   } catch (e) { $('createErr').textContent = e.message; }
 }
 

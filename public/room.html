@@ -82,14 +82,14 @@
 
 <script src="/common.js"></script>
 <script>
-const CODE = location.pathname.split('/')[2].toUpperCase();
+const CODE = pageCode();
 let view = null;
 let formsKey = '';
 
 async function act(action, body = {}) {
   try {
     const res = await api(`/api/r/${CODE}/${action}`, body);
-    if (res.left || res.deleted) return (location.href = '/');
+    if (res.left || res.deleted) return (location.href = ROUTES.home);
     render(res);
     return res;
   } catch (e) { alert(e.message); }
@@ -146,8 +146,8 @@ function renderMembers(v) {
       <div class="row">
         ${m.isMe && v.spotifyReady ? (m.spotify.connected
           ? `<button onclick="confirm('Spotify trennen?') && act('spotify-disconnect')">Spotify trennen</button>`
-          : `<a class="btn primary" href="/auth/spotify/${CODE}">Spotify verbinden</a>`) : ''}
-        ${v.me.isOwner && !m.isOwner ? `<button class="danger" onclick="confirm('${esc(m.displayName)} aus dem Raum entfernen?') && act('kick', { memberId: '${esc(m.id)}' })">Entfernen</button>` : ''}
+          : `<a class="btn primary" href="${ROUTES.spotify(CODE)}">Spotify verbinden</a>`) : ''}
+        ${v.me.isOwner && !m.isOwner ? `<button class="danger" onclick="confirm(${jsArg(m.displayName + ' aus dem Raum entfernen?')}) && act('kick', { memberId: ${jsArg(m.id)} })">Entfernen</button>` : ''}
       </div>
     </div>`).join('');
 }
@@ -175,8 +175,8 @@ function blockBtn(e) {
   const name = (e.login || e.user || '').toLowerCase();
   if (!name) return '';
   return view.blacklist.includes(name)
-    ? `<button title="${esc(name)} entsperren" onclick="act('blacklist', { user:'${esc(name)}', add:false })">✅</button>`
-    : `<button title="${esc(name)} sperren" onclick="confirm('${esc(name)} für Requests sperren?') && act('blacklist', { user:'${esc(name)}', add:true })">🚫</button>`;
+    ? `<button title="${esc(name)} entsperren" onclick="act('blacklist', { user: ${jsArg(name)}, add:false })">✅</button>`
+    : `<button title="${esc(name)} sperren" onclick="confirm(${jsArg(name + ' für Requests sperren?')}) && act('blacklist', { user: ${jsArg(name)}, add:true })">🚫</button>`;
 }
 
 function renderQueue(v) {
@@ -191,10 +191,10 @@ function renderQueue(v) {
     : first + q.map((e, i) => `<li>${e.image ? `<img src="${esc(e.image)}" alt="">` : ''}
       <div class="info"><div><b>${i + 1 + off}. ${esc(e.name)}</b> – ${esc(e.artists)}</div>
       <div class="muted">${esc(e.user)} · #${esc(e.channel)} · ${time(e.durationMs)}</div></div>
-      <button title="hoch" onclick="act('move', { id:'${e.id}', dir:-1 })">▲</button>
-      <button title="runter" onclick="act('move', { id:'${e.id}', dir:1 })">▼</button>
+      <button title="hoch" onclick="act('move', { id: ${jsArg(e.id)}, dir:-1 })">▲</button>
+      <button title="runter" onclick="act('move', { id: ${jsArg(e.id)}, dir:1 })">▼</button>
       ${blockBtn(e)}
-      <button title="entfernen" onclick="act('remove', { id:'${e.id}' })">✕</button></li>`).join('');
+      <button title="entfernen" onclick="act('remove', { id: ${jsArg(e.id)} })">✕</button></li>`).join('');
 }
 
 function renderHistory(h) {
@@ -204,7 +204,7 @@ function renderHistory(h) {
       <div class="info"><div><b>${esc(e.name)}</b> – ${esc(e.artists)}</div>
       <div class="muted">${when(e.playedAt)} · gewünscht von <b>${esc(e.user)}</b> · #${esc(e.channel)}</div></div>
       ${e.url ? `<a class="btn" title="In Spotify öffnen" href="${esc(e.url)}" target="_blank" rel="noopener">↗</a>` : ''}
-      <button title="Nochmal in die Warteschlange" onclick="act('requeue', { id:'${e.id}' })">↻</button>
+      <button title="Nochmal in die Warteschlange" onclick="act('requeue', { id: ${jsArg(e.id)} })">↻</button>
       ${blockBtn(e)}</li>`).join('') : '<p class="muted">Noch keine Requests gespielt.</p>';
 }
 
@@ -317,7 +317,7 @@ function settingsHtml(v) {
       ${saveRow('chat')}`,
 
     blacklist: section('Gesperrte Zuschauer', 'Gesperrte können keine Songs wünschen. Sperren geht auch mit 🚫 in Warteschlange und Verlauf oder per Chat: <code>!srblock name</code> / <code>!srunblock name</code> (Mods).', `
-      <div class="row">${st.blacklist.length ? st.blacklist.map((n) => `<span class="tag">${esc(n)}<button title="entsperren" onclick="act('blacklist', { user:'${esc(n)}', add:false })">✕</button></span>`).join('') : '<span class="muted">Niemand gesperrt.</span>'}</div>
+      <div class="row">${st.blacklist.length ? st.blacklist.map((n) => `<span class="tag">${esc(n)}<button title="entsperren" onclick="act('blacklist', { user: ${jsArg(n)}, add:false })">✕</button></span>`).join('') : '<span class="muted">Niemand gesperrt.</span>'}</div>
       <div class="row"><input id="bl_add" data-sec="blacklist" placeholder="Twitch-Name">
         <button onclick="if ($('bl_add').value.trim()) { act('blacklist', { user: $('bl_add').value, add:true }); $('bl_add').value = ''; }">Sperren</button></div>`),
 

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Songrequest-Overlay (Demo)</title>
+<style>
+  /* Für OBS-Browserquelle: transparenter Hintergrund, ca. 600×220 */
+  body { margin:0; background:transparent; color:#fff; font:16px/1.3 system-ui, sans-serif; text-shadow:0 1px 3px rgba(0,0,0,.8); }
+  .box { display:none; gap:14px; align-items:center; background:rgba(15,15,20,.75); border-radius:14px; padding:12px; width:fit-content; max-width:560px; }
+  .box.show { display:flex; }
+  img { width:80px; height:80px; border-radius:8px; object-fit:cover; }
+  .title { font-weight:700; font-size:20px; }
+  .who { font-size:13px; opacity:.8; margin-top:2px; }
+  .next { font-size:13px; opacity:.75; margin-top:6px; }
+  .bar { height:4px; background:rgba(255,255,255,.2); border-radius:2px; margin-top:8px; overflow:hidden; }
+  .bar div { height:100%; background:#1db954; }
+</style>
+</head>
+<body data-overlay="1" style="background:repeating-conic-gradient(#2a2a2a 0 25%,#202020 0 50%) 0 0/24px 24px;padding:24px">
+<div class="box" id="box"></div>
+<script src="demo-api.js"></script>
+<script>
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+const code = window.SR_CODE || location.pathname.split('/')[2];
+const key = new URLSearchParams(location.search).get('k') || '';
+async function refresh() {
+  try {
+    const res = await fetch(`/api/overlay/${code}?k=${encodeURIComponent(key)}`);
+    if (!res.ok) return;
+    const s = await res.json();
+    const c = s.current, p = s.playback, box = document.getElementById('box');
+    // Welcher Song wird gezeigt? Ein laufender Request immer, sonst je nach Einstellung
+    // auch der Song, der gerade ohne Request läuft.
+    let show = null;
+    if (c && (!p || p.requested || !s.overlayShowAll)) show = c;
+    else if (s.overlayShowAll && p && p.isPlaying) show = { ...p, user: null };
+    if (!show) { box.className = 'box'; return; }
+    const next = [s.queued, ...s.queue].filter(Boolean).slice(0, 2).map((e) => `${esc(e.name)} (${esc(e.user)})`).join(' · ');
+    const playing = p && (p.requested || !show.user);
+    const pct = playing && p.durationMs ? (p.progressMs / p.durationMs) * 100 : 0;
+    box.className = 'box show';
+    box.innerHTML = `${show.image ? `<img src="${esc(show.image)}" alt="">` : ''}<div>
+      <div class="title">${esc(show.name)}</div><div>${esc(show.artists)}</div>
+      ${show.user ? `<div class="who">🎵 gewünscht von ${esc(show.user)}</div>` : ''}
+      ${next ? `<div class="next">Als Nächstes: ${next}</div>` : ''}
+      <div class="bar"><div style="width:${pct}%"></div></div></div>`;
+  } catch {}
+}
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

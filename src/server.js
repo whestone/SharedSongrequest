@@ -87,6 +87,8 @@ const allowedOrigins = config.local
   ? [origin, `http://127.0.0.1:${config.port}`, `http://localhost:${config.port}`]
   : [origin];
 
+const joinFails = new Map(); // userId -> Zeitpunkte falscher Raumcodes
+
 class HttpError extends Error {
   constructor(status, msg) {
     super(msg);
@@ -225,7 +227,17 @@ async function handle(req, res) {
     const body = await readJson(req);
 
     if (p === '/api/rooms') return send(res, 200, { code: rooms.create(user).code });
-    if (p === '/api/join') return send(res, 200, { code: rooms.join(body.code, user).code });
+    if (p === '/api/join') {
+      // Gegen Durchprobieren von Raumcodes: max. 10 falsche Codes in 10 Minuten
+      const now = Date.now();
+      const fails = (joinFails.get(user.id) || []).filter((t) => now - t < 10 * 60_000);
+      if (fails.length >= 10) throw new HttpError(429, 'Zu viele falsche Codes. Versuch es in ein paar Minuten nochmal.');
+      if (!rooms.get(body.code)) {
+        joinFails.set(user.id, [...fails, now]);
+        throw new HttpError(404, 'Diesen Raumcode gibt es nicht.');
+      }
+      return send(res, 200, { code: rooms.join(body.code, user).code });
+    }
 
     if ((m = p.match(/^\/api\/r\/([A-Za-z0-9]{4,10})\/([a-z-]+)$/))) {
       const room = requireRoom(m[1], user);
